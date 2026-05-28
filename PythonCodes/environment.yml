@@ -1,0 +1,14 @@
+name: mp_ranging_casestudy
+channels:
+  - conda-forge
+  - defaults
+  - anaconda
+dependencies:
+  - numpy=1.16
+  - pandas
+  - python
+  - matplotlib
+  - notebook
+  - obspy
+  - nose
+  - scipy
