@@ -3,11 +3,12 @@
 
 Config-driven rewrite of the former MP_Marianas_automation_Brydes.py script.
 Per-station geometry, channel, and date ranges are read from a station-info
-CSV; all other parameters come from a YAML config (see config/marianas.yaml).
+CSV; all other parameters come from a per-species YAML config (see
+config/detect_brydes.yaml and config/detect_fin.yaml).
 
 Example:
-    whaletracks-detect --config whaletracks/config/marianas.yaml
-    whaletracks-detect --config whaletracks/config/marianas.yaml --station B19
+    whaletracks-detect --config whaletracks/config/detect_fin.yaml
+    whaletracks-detect --config whaletracks/config/detect_brydes.yaml --station B19
 """
 
 import argparse
@@ -22,18 +23,12 @@ from obspy.clients.fdsn import Client
 from scipy.interpolate import interp1d
 from scipy.signal import hilbert
 
-from whaletracks.cli._common import LOG, load_yaml, resolve_relative, setup_logging
+from whaletracks.cli._common import LOG, load_yaml, setup_logging
 from whaletracks.common import constants as cn
 from whaletracks.common.util import datetime_to_epoch
 from whaletracks.detection import basic_ranging_model as ranging
 from whaletracks.detection import detect_calls as detect
 from whaletracks.detection.event_analyzer import EventAnalyzer
-
-# Amplitude/SNR envelope stacking window (seconds before/after, pad in samples).
-# These reproduce the literal arguments used in the legacy script.
-AMPS_DT_UP = 4
-AMPS_DT_DOWN = 4
-AMPS_PAD_LENGTH = 6000
 
 
 def run_station(
@@ -49,6 +44,8 @@ def run_station(
     snr,
     event,
     multipath,
+    ranging_thresholds,
+    amps,
     sound_speed,
     response,
     day_length,
@@ -64,9 +61,14 @@ def run_station(
 ):
     """Run the detection + multipath pipeline for a single station.
 
-    All parameters are explicit (the legacy version relied on module globals).
-    Numeric behaviour is identical to MP_Marianas_automation_Brydes.main().
+    All parameters are explicit and supplied from a species config (Bryde's or
+    fin). Species differences — kernel, frequency bands, SNR/EQ bands, event
+    thresholds, autocorrelation window, ranging call-count thresholds, and the
+    amplitude-envelope window — are all config-driven. ``snr['eq_band']`` is
+    optional: when omitted (fin), the earthquake-band SNR column is not
+    computed.
     """
+    has_eq = bool(snr.get("eq_band"))
     if os.path.isfile(chunk_path) and is_restart:
         analyzers = [pd.read_csv(chunk_path)]
         auto_df_full = [pd.read_csv(auto_path)]
@@ -109,7 +111,7 @@ def run_station(
             continue
 
         try:
-            st_raw.detrend(type="demean")
+            st_raw.detrend(type=response.get("detrend", "demean"))
             st_raw.remove_response(output=response["output"], pre_filt=response["pre_filt"])
         except Exception:
             # Occasional internet hiccups drop the connection; wait and retry
@@ -180,24 +182,26 @@ def run_station(
                     amplitude_envelope,
                     utcstart_chunk - 0.5 * chunk_length,
                     analyzer_j,
-                    AMPS_DT_UP,
-                    AMPS_DT_DOWN,
-                    pad_length=AMPS_PAD_LENGTH,
+                    amps["dt_up"],
+                    amps["dt_down"],
+                    pad_length=amps["pad_length"],
                 )
 
-                # Low band to screen earthquakes / T-phases
-                sos_eq = sig.butter(4, np.array(snr["eq_band"]), "bp", fs=samp, output="sos")
-                filtered_data_eq = sig.sosfiltfilt(sos_eq, tr_filt.data)
-                amplitude_envelope_eq = abs(hilbert(filtered_data_eq))
-                maxamp_eq, ambient_snr_eq, snr_eq, medamp_eq = detect.amps_snr_timeseries(
-                    seconds,
-                    amplitude_envelope_eq,
-                    utcstart_chunk - 0.5 * chunk_length,
-                    analyzer_j,
-                    AMPS_DT_UP,
-                    AMPS_DT_DOWN,
-                    pad_length=AMPS_PAD_LENGTH,
-                )
+                # Optional low band to record earthquake-band SNR (Bryde's config
+                # only; not used for detection filtering).
+                if has_eq:
+                    sos_eq = sig.butter(4, np.array(snr["eq_band"]), "bp", fs=samp, output="sos")
+                    filtered_data_eq = sig.sosfiltfilt(sos_eq, tr_filt.data)
+                    amplitude_envelope_eq = abs(hilbert(filtered_data_eq))
+                    _, _, snr_eq, _ = detect.amps_snr_timeseries(
+                        seconds,
+                        amplitude_envelope_eq,
+                        utcstart_chunk - 0.5 * chunk_length,
+                        analyzer_j,
+                        amps["dt_up"],
+                        amps["dt_down"],
+                        pad_length=amps["pad_length"],
+                    )
             else:
                 continue
 
@@ -205,7 +209,8 @@ def run_station(
             n_rows = analyzer_j.df.shape[0]
             analyzer_j.df[cn.SNR] = snr_vals
             analyzer_j.df["ambient_snr"] = ambient_snr
-            analyzer_j.df["eq_snr"] = snr_eq
+            if has_eq:
+                analyzer_j.df["eq_snr"] = snr_eq
             analyzer_j.df["db_amps"] = 20 * np.log10(maxamp)
             analyzer_j.df[cn.STATION_CODE] = np.repeat(tr_filt.stats.station, n_rows)
             analyzer_j.df[cn.NETWORK_CODE] = np.repeat(tr_filt.stats.network, n_rows)
@@ -240,7 +245,10 @@ def run_station(
                     & (analyzer_j.df["peak_time"] < (end_utc - chunk_length / 2 + 30))
                 ]
 
-                if len(min_df_sub) >= 1 and len(j_df_sub) >= 3:
+                if (
+                    len(min_df_sub) >= ranging_thresholds["min_center"]
+                    and len(j_df_sub) >= ranging_thresholds["min_window"]
+                ):
                     # 10x-resolution detection score via cubic spline, then autocorrelate
                     det_timesnew = np.linspace(
                         min(times_sub), max(times_sub), len(times_sub) * 10
@@ -280,8 +288,9 @@ def run_station(
                         "peaks": [np.median(j_df_sub["peak_signal"])],
                         "snr": [np.median(j_df_sub["snr"])],
                         "db_amps": [np.median(j_df_sub["db_amps"])],
-                        "low_snr": [np.mean(j_df_sub["eq_snr"])],
                     }
+                    if has_eq:
+                        d2["low_snr"] = [np.mean(j_df_sub["eq_snr"])]
                     auto_df = pd.DataFrame(d2)
                     auto_df = pd.concat([auto_df, mp_df_auto.head(1)], axis=1)
                     auto_df_full.append(auto_df)
@@ -327,8 +336,10 @@ def main(argv=None):
     setup_logging(args.verbose)
     cfg = load_yaml(args.config)
 
-    table_path = resolve_relative(args.config, cfg["station_table"])
-    table = pd.read_csv(table_path, parse_dates=["startdate", "enddate"])
+    # Station table path is relative to the working directory (run from the
+    # PythonCodes dir), matching the other data paths. It is the SAME shared
+    # table for both species (see config comments).
+    table = pd.read_csv(cfg["station_table"], parse_dates=["startdate", "enddate"])
 
     client = Client(cfg["client"])
     ss = cfg["sound_speed"]["water"]
@@ -348,8 +359,11 @@ def main(argv=None):
         dt_down = max(np.subtract(mp_interp, t0)) + 0.2
         dt_up = cfg["download"]["dt_up_s"]
 
-        chunk_path = os.path.join(output_dir, f"{station}_mp_Brydes_TEST.csv")
-        auto_path = os.path.join(output_dir, f"auto_{station}_mp_Brydes_TEST.csv")
+        out = cfg.get("output", {})
+        det_template = out.get("detection_template", "{station}_mp.csv")
+        auto_template = out.get("auto_template", "auto_{station}_mp.csv")
+        chunk_path = os.path.join(output_dir, det_template.format(station=station))
+        auto_path = os.path.join(output_dir, auto_template.format(station=station))
 
         LOG.info("Station %s (row %d): dt_up=%.2f dt_down=%.2f", station, site_ind, dt_up, dt_down)
         run_station(
@@ -365,6 +379,8 @@ def main(argv=None):
             snr=cfg["snr"],
             event=cfg["event"],
             multipath=cfg["multipath"],
+            ranging_thresholds=cfg["ranging"],
+            amps=cfg["amps"],
             sound_speed=cfg["sound_speed"],
             response=cfg["response"],
             day_length=cfg["download"]["day_length_s"],

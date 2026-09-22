@@ -1,0 +1,86 @@
+# Detection + multipath ranging config — BRYDE'S whales, Marianas.
+# Reproduces the parameters of the legacy MP_Marianas_automation_Brydes.py.
+# Used by: whaletracks-detect --config detect_brydes.yaml
+
+client: IRIS            # FDSN data center (anonymous access; public data)
+network: XF             # seismic network code
+location: "*"           # location code ('*' = any)
+
+# Shared station table (the 7 published good-data OBS), used by BOTH species.
+# Path is relative to the working directory (run from PythonCodes).
+station_table: data/Station_info_Marianas.csv
+site_range: [0, 7]      # rows of the station table to process (start, stop)
+
+output_dir: data/brydes_whale   # where detection/autocorr CSVs are written
+
+# Standardized output file names (same scheme for both species)
+output:
+  detection_template: "{station}_mp.csv"
+  auto_template: "auto_{station}_mp.csv"
+
+# Sound speeds (m/s) used by the analytic ranging model
+sound_speed:
+  water: 1512
+  sediment: 1512
+
+# Bryde's-call detection kernel (descending FM sweep, ~37->33 Hz)
+kernel:
+  f0: 37
+  f1: 33
+  bdwdth: 2
+  dur: 3
+
+# Data download / chunking
+download:
+  day_length_s: 43200   # 60*60*12 : waveform chunk downloaded per iteration
+  chunk_length_s: 1200  # 60*20    : autocorrelation window (20 min)
+  dt_up_s: 2            # multipath search window before the direct arrival
+  max_retries: 5
+
+# Instrument response removal
+response:
+  output: VEL
+  detrend: demean
+  pre_filt: [1, 3, 45, 49]
+
+# Spectrogram parameters
+spectrogram:
+  window_size: 0.8
+  overlap: 0.95
+  freqlim: [10, 45]
+
+# Signal-to-noise measurement. eq_band records an earthquake-band SNR column
+# (informational only; not used to filter detections).
+snr:
+  limits: [28, 40]
+  calllength: 1
+  freqwidth: 3
+  eq_band: [5, 15]
+
+# Amplitude-envelope window for amps/SNR (seconds up/down, pad in samples)
+amps:
+  dt_up: 4
+  dt_down: 4
+  pad_length: 6000
+
+# Event (call) picking
+event:
+  prominence: 1000
+  dur: 0.1
+  distance: 16
+  rel_height: 0.5
+
+# Multipath autocorrelation picking
+multipath:
+  dur: 0.1
+  prominence: 0
+  distance: 1
+  rel_height: 0.5
+
+# Ranging is attempted only when a minute has >= min_center calls and the
+# surrounding autocorrelation window has >= min_window calls.
+ranging:
+  min_center: 1
+  min_window: 3
+
+is_restart: false

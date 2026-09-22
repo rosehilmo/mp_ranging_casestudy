@@ -7,7 +7,7 @@ theoretical timing-vs-distance curve (BELLHOP ray table or the analytic ranging
 model) to estimate range. Results are written to a CSV and plotted.
 
 Example:
-    whaletracks-plot-ranges --config whaletracks/config/plot_ranges.yaml \
+    whaletracks-plot-ranges --config whaletracks/config/ranges_fin.yaml \
         --station B01 --save ranges_B01.png
 """
 
@@ -134,7 +134,7 @@ def estimate_ranges(cfg, station, save=None, show=False):
             auto_amp += [df["db_amps"]]
             auto_count += [df["sum_calls"]]
             center_calls += [df["n_calls"]]
-            low_freq_snr += [df["low_snr"]]
+            low_freq_snr += [df["low_snr"] if "low_snr" in df else np.nan]
             autopeaks_mp2_save += [best_distance_2 / 1000]
             autopeaks_mp3_save += [best_distance_3 / 1000]
 
@@ -157,10 +157,16 @@ def estimate_ranges(cfg, station, save=None, show=False):
         }
     )
 
-    # Quality filter for the scatter plot
-    enough_samps = np.where(np.array(auto_max) > cfg["filters"]["min_auto_max"])
-    no_low_noise = np.where(np.array(low_freq_snr) < cfg["filters"]["max_low_freq_snr"])
-    suminds = np.intersect1d(enough_samps, no_low_noise)
+    # Quality filter for the scatter plot. The earthquake-band (low_snr) filter
+    # is only applied when configured and available (Bryde's); fin data has no
+    # such column.
+    enough_samps = np.where(np.array(auto_max) > cfg["filters"]["min_auto_max"])[0]
+    max_low = cfg["filters"].get("max_low_freq_snr")
+    if max_low is not None and not np.all(np.isnan(low_freq_snr)):
+        no_low_noise = np.where(np.array(low_freq_snr) < max_low)[0]
+        suminds = np.intersect1d(enough_samps, no_low_noise)
+    else:
+        suminds = enough_samps
 
     timesarray = np.array(autotimes_save)
     peaksarray1 = np.array(autopeaks_mp1_save)

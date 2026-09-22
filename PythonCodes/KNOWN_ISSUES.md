@@ -89,3 +89,46 @@ rather than preserve a broken branch.
 (`"HHZ,EHZ,ELZ,BHZ,EDH"`) in the CSV `channel` column instead of the channel
 actually returned by the waveform request. Preserved.
 
+
+## Species-agnostic unification (fin + Bryde's) — deliberate decisions
+
+The detection pipeline (`whaletracks/cli/run_detection.py`) now ranges to fin
+*or* Bryde's whales from a per-species config (`detect_fin.yaml` /
+`detect_brydes.yaml`). Bryde's numeric behavior is unchanged (only output file
+names were standardized to `{station}_mp.csv` / `auto_{station}_mp.csv`). The
+fin profile reproduces the published method (Hilmo & Wilcock 2024; Hilmo et al.
+2025) via `MP_Marianas_automation.py`, with these author-directed decisions:
+
+1. **Earthquake/T-phase discriminator dropped.** The experimental
+   `MultipathRanging_Fins.py` filtered ranging on a call-band vs low-band
+   amplitude test (`db_amps + 5 > db_amps_eq`). This was *not* in the published
+   method — Hilmo et al. (2025) reject earthquakes/T-phases by manual inspection
+   and temporal track association, and explicitly name automated signal-based
+   rejection as future work. It is therefore not implemented.
+
+2. **Fin ranging thresholds set to the published values.** A range is attempted
+   only when the center minute has ≥2 calls and the surrounding 20-min window has
+   ≥10 calls (Hilmo et al. 2025), overriding this code copy's `≥1` / 10-min
+   window. Bryde's keeps its own `≥1` center / `≥3` window. (The ≥12-range
+   track-grouping is a separate downstream density-estimation step, not part of
+   the ranging code.)
+
+3. **Amplitude/SNR reference time made consistent.** The legacy fin script
+   passed `utcstart_chunk` to the amplitude routine while passing
+   `utcstart_chunk - 0.5*chunk_length` to the event picker — internally
+   inconsistent. The unified code uses the `-0.5*chunk_length` reference for
+   both, so amplitude/SNR align with the detections. This may shift fin
+   amplitude/SNR values slightly versus the exact legacy script.
+
+4. **Always-None frequency columns dropped.** The legacy fin output carried
+   `peak_frequency`/`start_frequency`/… columns that were only populated for blue
+   whales and always `None` for fin; they are no longer written.
+
+5. **FDSN credentials removed.** `MP_Marianas_automation.py` contained a
+   plaintext IRIS username/password; the pipeline now uses an anonymous
+   `Client('IRIS')` (the data are public). That password should be rotated.
+
+The fin detection path could not be executed here (needs IRIS access and a fin
+station table, `Station_info_Marianas_fin.csv`, which is not distributed). It is
+verified structurally (imports, config parse, `--help`); the author should
+validate a fin run on real data.

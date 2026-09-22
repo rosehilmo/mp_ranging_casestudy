@@ -31,3 +31,15 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# External sample documentation (formatting reference only — do not track)
+Sample documentation_NEAREST/
+
+# Publisher PDFs — keep local, do NOT commit (copyright; cite the papers instead).
+# The JASA 2024 paper is standard ASA copyright; do not post the published PDF publicly.
+PythonCodes/literature/
+
+# Quarto render artifacts
+/PythonCodes/tutorials/*_files/
+/PythonCodes/tutorials/*.html
+.quarto/

@@ -18,8 +18,10 @@ from whaletracks.cli import _common
 from whaletracks.cli.plot_ranges import estimate_ranges
 
 PKG_ROOT = os.path.dirname(os.path.dirname(__file__))
-CONFIG = os.path.join(PKG_ROOT, "whaletracks", "config", "plot_ranges.yaml")
-LEGACY_OUT = os.path.join(PKG_ROOT, "MarianasAutoFiles", "Marianas_auto_B01_v2.csv")
+CONFIG = os.path.join(PKG_ROOT, "whaletracks", "config", "ranges_brydes.yaml")
+LEGACY_OUT = os.path.join(
+    PKG_ROOT, "data", "brydes_whale", "MarianasAutoFiles", "Marianas_auto_B01_v2.csv"
+)
 
 RANGE_COLS = ["range_D_MP1", "range_MP1_MP2", "range_MP2_MP3"]
 

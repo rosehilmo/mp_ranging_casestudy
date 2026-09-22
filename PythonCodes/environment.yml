@@ -13,6 +13,9 @@ dependencies:
   # Configuration + notebooks
   - pyyaml
   - notebook
+  # Tutorials (interactive, student-facing figures) + doc rendering
+  - plotly
+  - quarto
   # Dev tooling
   - pytest
   - ruff

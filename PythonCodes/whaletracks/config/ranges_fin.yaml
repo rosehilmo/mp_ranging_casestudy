@@ -1,0 +1,33 @@
+# Range estimation + plotting config — FIN whales, Marianas.
+# Used by: whaletracks-plot-ranges --config ranges_fin.yaml --station B01
+#
+# Paths resolved relative to the current working directory (run from PythonCodes).
+
+ranging_source: bellhop
+
+# Shared BELLHOP ray-arrival tables (same tables used for both species)
+bellhop_dir: data/bellhop_arrival_models
+bellhop_template: "Marianas_ray_{station}_bellhop_arrivals.csv"
+
+analytic:
+  depth: 5271
+  ss: 1512
+  sed_speed: 1550
+  t: 419
+
+reflectivity: false
+
+# Fin detection / autocorrelation inputs (standardized names)
+calls_dir: data/fin_whale
+calls_template: "{station}_mp.csv"
+auto_template: "auto_{station}_mp.csv"
+
+output_dir: data/fin_whale
+output_template: "Marianas_auto_{station}_v2.csv"
+
+# Fin auto output has no earthquake-band column, so only the auto_max filter
+# applies (max_low_freq_snr is omitted).
+filters:
+  min_auto_max: 3
+
+ylim_km: [0, 40]

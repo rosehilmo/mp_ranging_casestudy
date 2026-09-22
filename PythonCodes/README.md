@@ -37,13 +37,20 @@ whaletracks/
                make_histogram.py               # yearly detection histogram
                verify_calls.py                 # interactive call verification (GUI)
                manual_picker.py                # interactive manual picking (GUI)
-  config/      *.yaml                           # run configurations
+  config/      detect_fin.yaml, detect_brydes.yaml   # detection configs (per species)
+               ranges_fin.yaml, ranges_brydes.yaml   # range-estimation configs
+               verify_calls.yaml, manual_picker.yaml
                Station_info_Marianas_Brydes.csv
 tests/         golden-master + regression tests
-bellhop_arrival_models/   per-station BELLHOP ray-arrival tables
-LongCall_YearPicks/       detection + autocorrelation CSVs
-MarianasAutoFiles/        range-estimation outputs
+data/
+  bellhop_arrival_models/   per-station BELLHOP ray-arrival tables (shared)
+  brydes_whale/             Bryde's detections + range outputs
+  fin_whale/                fin detections + range outputs
 ```
+
+The same pipeline ranges to either species; the two `detect_*.yaml` /
+`ranges_*.yaml` pairs differ only in parameters. The fin profile reproduces the
+published method of Hilmo & Wilcock (2024) and Hilmo et al. (2025).
 
 ## Commands
 
@@ -52,28 +59,31 @@ Each command takes `--config <yaml>` and writes CSVs / figures. Run from the
 
 ### Automated detection + multipath ranging
 ```bash
-whaletracks-detect --config whaletracks/config/marianas.yaml            # all stations
-whaletracks-detect --config whaletracks/config/marianas.yaml --station B19
+whaletracks-detect --config whaletracks/config/detect_fin.yaml               # all stations
+whaletracks-detect --config whaletracks/config/detect_brydes.yaml --station B19
 ```
 Downloads waveforms from IRIS, detects calls, measures SNR/amplitude, and
-autocorrelates the detection score to time multipath arrivals. Per-station
-geometry, channel, and dates come from the station-info CSV named in the config;
-all other parameters (kernel, spectrogram, SNR, event thresholds, chunking) come
-from the YAML. **Requires network access.**
+autocorrelates the detection score to time multipath arrivals. There is one
+config per species (`detect_fin.yaml`, `detect_brydes.yaml`); they differ only
+in parameters (kernel, frequency bands, event thresholds, autocorrelation
+window, and ranging call-count thresholds). Per-station geometry, channel, and
+dates come from the station-info CSV named in the config. **Requires network
+access.**
 
 ### Range estimation + plots
 ```bash
-whaletracks-plot-ranges --config whaletracks/config/plot_ranges.yaml \
+whaletracks-plot-ranges --config whaletracks/config/ranges_brydes.yaml \
     --station B01 --save ranges_B01.png
 ```
 Matches each autocorrelation minute's strongest multipath timing to a
-theoretical timing-vs-distance curve (BELLHOP ray table from
-`bellhop_arrival_models/`, or the analytic model) and writes range estimates to
-`MarianasAutoFiles/`. Offline — runs on the shipped CSVs.
+theoretical timing-vs-distance curve (shared BELLHOP ray table from
+`data/bellhop_arrival_models/`, or the analytic model) and writes range
+estimates to `data/<species>_whale/`. Offline — runs on the shipped CSVs
+(`ranges_fin.yaml` for fin).
 
 ### Detection histogram
 ```bash
-whaletracks-histogram --input LongCall_YearPicks/B12_mp_Brydes_Year_LongCall.csv \
+whaletracks-histogram --input data/brydes_whale/LongCall_YearPicks/B12_mp_Brydes_Year_LongCall.csv \
     --threshold 5000 --save hist_B12.png
 ```
 
