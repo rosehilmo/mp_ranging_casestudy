@@ -1,175 +1,163 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Tue Jan 28 14:15:18 2020
+Detect events (whale calls) in a detection-score time series via
+``scipy.signal.find_peaks`` and expose the results as pandas DataFrames.
 
+Created on Tue Jan 28 14:15:18 2020
 @author: wader
 """
 
-import common.constants as cn
-import pandas as pd
-import scipy.signal as sig
 import matplotlib.pyplot as plt
 import numpy as np
-from obspy import UTCDateTime
-from common import util
-import math
+import pandas as pd
+import scipy.signal as sig
 
-#b-call dur=5, rel_height=.7 and prominence=.5 wlen=60 seconds
-#a-call dur=70, rel_height=.9 prominence=.3 wlen=2 min distance=30
-#fin-call dur=.5, rel_height=.3 prominence=.6 wlen=60 sec distance=18
-#REL_HEIGHT=.3
+from whaletracks.common import constants as cn
+
+# Reference call parameters (blue/fin whale tuning notes):
+#   b-call  dur=5,  rel_height=.7 prominence=.5 wlen=60 s
+#   a-call  dur=70, rel_height=.9 prominence=.3 wlen=2 min distance=30
+#   fin-call dur=.5, rel_height=.3 prominence=.6 wlen=60 s distance=18
 SECONDS_IN_MINUTE = 60
 EXCLUDED_COLUMNS = [cn.THRESHOLD, cn.STATION_CODE, cn.NETWORK_CODE]
 
-class EventAnalyzer(object):
-    
-    def __init__(self, times, values, start_chunk, dur=1, prominence=.6, distance=18, rel_height=.8):
+
+class EventAnalyzer:
+    def __init__(
+        self, times, values, start_chunk, dur=1, prominence=0.6, distance=18, rel_height=0.8
+    ):
         """
         :param list-float times: offsets in seconds
         :param list-float values: values at times
-        :param UTCdatetime: start time of chunk
+        :param UTCDateTime start_chunk: start time of chunk
         :param float dur: duration in seconds of call (default for blue whale)
         """
         self.times = [start_chunk + t for t in times]
         self.values = values
         self.start_chunk = start_chunk
-        peak_indicies, peak_properties=sig.find_peaks(self.values,
-            distance=distance*(1/(self.times[1]-self.times[0])),
-            width=dur*(1/(self.times[1]-self.times[0])),
+        samples_per_second = 1 / (self.times[1] - self.times[0])
+        peak_indices, peak_properties = sig.find_peaks(
+            self.values,
+            distance=distance * samples_per_second,
+            width=dur * samples_per_second,
             prominence=prominence,
-            wlen=SECONDS_IN_MINUTE*(1/(self.times[1]-self.times[0])),
-            rel_height=rel_height)
-        
-        self.df = self._makeDetectionDF(peak_indicies, peak_properties)
+            wlen=SECONDS_IN_MINUTE * samples_per_second,
+            rel_height=rel_height,
+        )
+
+        self.df = self._make_detection_df(peak_indices, peak_properties, self.times)
         self.df[cn.THRESHOLD] = prominence
-        
-     
-    def _makeDetectionDF(self, peak_indicies, peak_properties):
+
+    @staticmethod
+    def _empty_detection_dict():
+        return {k: [] for k in cn.SCM_DETECTION.columns if k not in EXCLUDED_COLUMNS}
+
+    def _make_detection_df(self, peak_indices, peak_properties, times):
+        """Build a detection DataFrame from find_peaks output.
+
+        :param peak_indices: indices of detected peaks
+        :param peak_properties: properties dict returned by find_peaks
+        :param times: absolute times corresponding to the value series
+        :return pd.DataFrame: detection frame (excluding EXCLUDED_COLUMNS)
         """
-        :param int index: index of peak
-        :return pd.DataFrame: all columns, except for EXCLUDED_COLUMNS
-        """
-        dct = {k: [] for k in cn.SCM_DETECTION.columns 
-               if not k in EXCLUDED_COLUMNS}
-        for index in range(len(peak_indicies)):
-            dct[cn.PEAK_TIME].append(self.times[peak_indicies[index]])
+        dct = self._empty_detection_dict()
+        left = peak_properties["left_ips"].astype(int)
+        right = peak_properties["right_ips"].astype(int)
+        for index in range(len(peak_indices)):
+            dct[cn.PEAK_TIME].append(times[peak_indices[index]])
             dct[cn.PEAK_SIGNAL].append(peak_properties["prominences"][index])
-            dct[cn.START_TIME].append(
-                    self.times[peak_properties["left_ips"].astype(int)[index]])
-            dct[cn.END_TIME].append(
-                    self.times[peak_properties["right_ips"].astype(int)[index]])
+            dct[cn.START_TIME].append(times[left[index]])
+            dct[cn.END_TIME].append(times[right[index]])
             dct[cn.MIN_SIGNAL].append(peak_properties["width_heights"][index])
-            
-            dct[cn.DURATION].append(self.times[peak_properties["right_ips"].astype(int)[index]]-
-                                 self.times[peak_properties["left_ips"].astype(int)[index]])
-            dct[cn.PEAK_EPOCH] = list(np.repeat(None, len(dct[cn.PEAK_TIME])))
-            dct[cn.START_EPOCH] = list(np.repeat(None, len(dct[cn.START_TIME])))
-            dct[cn.END_EPOCH] = list(np.repeat(None, len(dct[cn.END_TIME])))
-            dct[cn.SNR] = list(np.repeat(None, len(dct[cn.PEAK_TIME])))
-            dct[cn.SNR_AMBIENT] = list(np.repeat(None, len(dct[cn.PEAK_TIME])))
-            dct[cn.SNR_EQ] = list(np.repeat(None, len(dct[cn.PEAK_TIME])))
-        #import pdb; pdb.set_trace()
-            
+            dct[cn.DURATION].append(times[right[index]] - times[left[index]])
+
+        n = len(peak_indices)
+        for key in (cn.PEAK_EPOCH, cn.START_EPOCH, cn.END_EPOCH, cn.SNR, cn.SNR_AMBIENT, cn.SNR_EQ):
+            dct[key] = list(np.repeat(None, n))
 
         return pd.DataFrame(dct)
 
-    
-    def mp_picker(self, times, values, utcstart_chunk, dur=.5, prominence=.1,distance=.1,rel_height=.5):
+    def mp_picker(
+        self, times, values, utcstart_chunk, dur=0.5, prominence=0.1, distance=0.1, rel_height=0.5
+    ):
         """
         :param list-float times: offsets in seconds
         :param list-float values: values at times
-        :param UTCdatetime: start time of chunk
-        :param float dur: duration in seconds of call (default for blue whale)
+        :param UTCDateTime utcstart_chunk: start time of chunk
+        :param float dur: duration in seconds of call
         """
-        
-        peak_indicies, peak_properties=sig.find_peaks(values,
-            distance=distance*(1/(times[1]-times[0])),
-            width=(dur/2)*(1/(times[1]-times[0])),
+        samples_per_second = 1 / (times[1] - times[0])
+        peak_indices, peak_properties = sig.find_peaks(
+            values,
+            distance=distance * samples_per_second,
+            width=(dur / 2) * samples_per_second,
             prominence=prominence,
-            wlen=SECONDS_IN_MINUTE*(1/(times[1]-times[0])),
-            rel_height=rel_height)
+            wlen=SECONDS_IN_MINUTE * samples_per_second,
+            rel_height=rel_height,
+        )
 
-        #import pdb; pdb.set_trace();
-        for ind in range(len(peak_properties['prominences'])):
-            peak_properties['prominences'][ind]=peak_properties['prominences'][ind]+max([values[peak_properties['left_bases'][ind]],values[peak_properties['right_bases'][ind]]])
+        for ind in range(len(peak_properties["prominences"])):
+            peak_properties["prominences"][ind] += max(
+                values[peak_properties["left_bases"][ind]],
+                values[peak_properties["right_bases"][ind]],
+            )
 
-        #import pdb; pdb.set_trace();  
-        mp_df_j = self.makeMultipathDF(peak_indicies, peak_properties, times, values, utcstart_chunk)
+        return self.make_multipath_df(peak_indices, peak_properties, times, values, utcstart_chunk)
 
-        return mp_df_j
+    def make_multipath_df(self, peak_indices, peak_properties, times, values, utcstart_chunk):
+        """Build a multipath-arrival DataFrame (top-5 arrivals by amplitude).
 
-    def makeMultipathDF(self, peak_indicies, peak_properties, times, values, utcstart_chunk):
+        :param peak_indices: indices of detected peaks
+        :param peak_properties: properties dict returned by find_peaks
+        :return pd.DataFrame: single-row multipath frame
         """
-        :param int index: index of peak
-        :return pd.DataFrame: all columns, except for EXCLUDED_COLUMNS
-        """
-        dct = {k: [] for k in cn.SCM_DETECTION.columns 
-               if not k in EXCLUDED_COLUMNS}
-        for index in range(len(peak_indicies)):
-            dct[cn.PEAK_TIME].append(times[peak_indicies[index]])
+        dct = self._empty_detection_dict()
+        left = peak_properties["left_ips"].astype(int)
+        right = peak_properties["right_ips"].astype(int)
+        for index in range(len(peak_indices)):
+            dct[cn.PEAK_TIME].append(times[peak_indices[index]])
             dct[cn.PEAK_SIGNAL].append(peak_properties["prominences"][index])
-            dct[cn.START_TIME].append(
-                    times[peak_properties["left_ips"].astype(int)[index]])
-            dct[cn.END_TIME].append(
-                    times[peak_properties["right_ips"].astype(int)[index]])
+            dct[cn.START_TIME].append(times[left[index]])
+            dct[cn.END_TIME].append(times[right[index]])
             dct[cn.MIN_SIGNAL].append(peak_properties["width_heights"][index])
-            
-            dct[cn.DURATION].append(times[peak_properties["right_ips"].astype(int)[index]]-
-                                 times[peak_properties["left_ips"].astype(int)[index]])
-            dct[cn.PEAK_EPOCH] = list(np.repeat(None, len(dct[cn.PEAK_TIME])))
-            dct[cn.START_EPOCH] = list(np.repeat(None, len(dct[cn.START_TIME])))
-            dct[cn.END_EPOCH] = list(np.repeat(None, len(dct[cn.END_TIME])))
-            dct[cn.SNR] = list(np.repeat(None, len(dct[cn.PEAK_TIME])))
-            dct[cn.SNR_AMBIENT] = list(np.repeat(None, len(dct[cn.PEAK_TIME])))
-            dct[cn.SNR_EQ] = list(np.repeat(None, len(dct[cn.PEAK_TIME])))
+            dct[cn.DURATION].append(times[right[index]] - times[left[index]])
 
-        event_df=pd.DataFrame(dct)
-        event_peaksort=event_df.sort_values(by=['peak_signal'],ascending=False)[0:5]
-        event_timesort=event_peaksort.sort_values(by=['peak_time'])
-        arrivals_sec = event_timesort['peak_time'].values.tolist()
-        #arrivals = [utcstart_chunk + a for a in arrivals_sec]
-        arrivals=arrivals_sec
-        time_diff=event_timesort[cn.DURATION].values.tolist()
-        amplitudes = event_timesort['peak_signal'].values.tolist()
-        nonelen=5-len(arrivals)
-        nonelist=list(np.repeat(None, nonelen))
-        arrivals=arrivals+nonelist
-        amplitudes=amplitudes+nonelist
-        time_diff = time_diff+nonelist
-        
-        mp_dct = {k: [] for k in cn.SCM_MULTIPATHS.columns 
-               if not k in EXCLUDED_COLUMNS}
-        #import pdb; pdb.set_trace()
-        mp_dct[cn.ARRIVAL_1].append(arrivals[0])
-        mp_dct[cn.ARRIVAL_2].append(arrivals[1])
-        mp_dct[cn.ARRIVAL_3].append(arrivals[2])
-        mp_dct[cn.ARRIVAL_4].append(arrivals[3])
-        mp_dct[cn.ARRIVAL_5].append(arrivals[4])
-        mp_dct[cn.AMP_1].append(amplitudes[0])
-        mp_dct[cn.AMP_2].append(amplitudes[1])
-        mp_dct[cn.AMP_3].append(amplitudes[2])
-        mp_dct[cn.AMP_4].append(amplitudes[3])
-        mp_dct[cn.AMP_5].append(amplitudes[4])
-        mp_dct[cn.ERR_1].append(time_diff[0])
-        mp_dct[cn.ERR_2].append(time_diff[1])
-        mp_dct[cn.ERR_3].append(time_diff[2])
-        mp_dct[cn.ERR_4].append(time_diff[3])
-        mp_dct[cn.ERR_5].append(time_diff[4])
-        mp_df = pd.DataFrame(mp_dct)
-        
-        return mp_df
-       
+        n = len(peak_indices)
+        for key in (cn.PEAK_EPOCH, cn.START_EPOCH, cn.END_EPOCH, cn.SNR, cn.SNR_AMBIENT, cn.SNR_EQ):
+            dct[key] = list(np.repeat(None, n))
 
-        
+        event_df = pd.DataFrame(dct)
+        event_peaksort = event_df.sort_values(by=["peak_signal"], ascending=False)[0:5]
+        event_timesort = event_peaksort.sort_values(by=["peak_time"])
+        arrivals = event_timesort["peak_time"].values.tolist()
+        time_diff = event_timesort[cn.DURATION].values.tolist()
+        amplitudes = event_timesort["peak_signal"].values.tolist()
+        nonelist = list(np.repeat(None, 5 - len(arrivals)))
+        arrivals = arrivals + nonelist
+        amplitudes = amplitudes + nonelist
+        time_diff = time_diff + nonelist
+
+        mp_dct = {k: [] for k in cn.SCM_MULTIPATHS.columns if k not in EXCLUDED_COLUMNS}
+        for i, col in enumerate(
+            (cn.ARRIVAL_1, cn.ARRIVAL_2, cn.ARRIVAL_3, cn.ARRIVAL_4, cn.ARRIVAL_5)
+        ):
+            mp_dct[col].append(arrivals[i])
+        for i, col in enumerate((cn.AMP_1, cn.AMP_2, cn.AMP_3, cn.AMP_4, cn.AMP_5)):
+            mp_dct[col].append(amplitudes[i])
+        for i, col in enumerate((cn.ERR_1, cn.ERR_2, cn.ERR_3, cn.ERR_4, cn.ERR_5)):
+            mp_dct[col].append(time_diff[i])
+        return pd.DataFrame(mp_dct)
+
     def plot(self, is_plot=True):
-        fig=plt.figure()
-        ax=fig.add_subplot(111)
-        ax.plot(self.times,self.values)
-        ax.plot(self.df.peak_time,self.df.peak_signal,'x')
-        plt.hlines(self.df.min_signal,self.df.start_time,
-                   self.df.end_time,color="C2")
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.plot(self.times, self.values)
+        ax.plot(self.df.peak_time, self.df.peak_signal, "x")
+        plt.hlines(self.df.min_signal, self.df.start_time, self.df.end_time, color="C2")
         if is_plot:
             plt.show(block=True)
 
-    
+
+# Backward-compatible aliases (legacy method names)
+EventAnalyzer._makeDetectionDF = EventAnalyzer._make_detection_df
+EventAnalyzer.makeMultipathDF = EventAnalyzer.make_multipath_df

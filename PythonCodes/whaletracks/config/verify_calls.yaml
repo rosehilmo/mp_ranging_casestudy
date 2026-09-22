@@ -1,0 +1,40 @@
+# Configuration for interactive verification of detected Bryde's whale calls.
+# Values reproduce the parameters previously hardcoded in
+# brydes_call_verification.py.
+
+client: IRIS            # FDSN data center
+network: XF             # seismic network code
+location: "*"           # location code ('*' = any)
+channel: HHZ            # channel to fetch
+
+# List of stations to verify
+station_list:
+  - B19
+
+# Start of the verification window; the window length is chunk_length_s.
+starttime: "2012-3-11T7:00:00.000"
+chunk_length_s: 600     # 1800/3 : seconds shown in the spectrogram
+max_retries: 5          # IRIS fetch retries
+
+# Detection CSV produced by the detection run (input), and the verified-call
+# CSV written by this tool (output). Paths resolve relative to this config.
+detection_file: LongCall_YearPicks/B02_mp_Brydes_Year_LongCall.csv
+chunk_file: verified_calls.csv
+
+# If true, append to an existing chunk_file instead of starting fresh
+is_restart: true
+
+# Instrument response removal
+response:
+  pre_filt: [0.2, 0.5, 45, 48]
+
+# Spectrogram parameters
+spectrogram:
+  filt_freqlim: [12, 45]
+  window_size: 1
+  overlap: 0.95
+  freqlim: [12, 45]     # frequency band subsampled for display / dB conversion
+
+# Plot appearance
+plot:
+  ylim: [25, 45]        # spectrogram frequency axis limits (Hz)

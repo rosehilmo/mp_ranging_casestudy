@@ -1,87 +1,66 @@
-"""Utilities for Whale Project."""
+"""Utilities for the whale project: string/time conversions.
 
+Public functions use snake_case names; the original camelCase names are kept
+as aliases at the bottom of the module for backward compatibility.
+"""
+
+import ast
 from datetime import datetime
 
+_EPOCH_START = datetime.strptime("1970-01-01T00:00:00.00Z", "%Y-%m-%dT%H:%M:%S.%fZ")
+_SECONDS_IN_DAY = 86400
 
-def complexifyString(stg, separator=";"):
-  """
-  Converts a string representation of complex numbers into
-  a list of complex numbers.
-  :param str stg: string of complex numbers
-  """
-  splits = stg.split(separator)
-  if len(splits[0]) > 0:
-    return [complex(eval(s)[0], eval(s)[1]) for s in splits]
-  else:
+
+def complexify_string(stg, separator=";"):
+    """Convert a separated string of ``(real, imag)`` pairs into complex numbers.
+
+    :param str stg: string of complex numbers, e.g. ``"(1,2);(3,-4)"``
+    :param str separator: delimiter between pairs
+    :return list: list of ``complex`` values (empty if ``stg`` is empty)
+    """
+    splits = stg.split(separator)
+    if len(splits[0]) > 0:
+        pairs = [ast.literal_eval(s) for s in splits]
+        return [complex(re, im) for re, im in pairs]
     return []
 
 
+def _delta_to_epoch(delta):
+    """Seconds elapsed for a ``timedelta`` since the Unix epoch."""
+    return delta.days * _SECONDS_IN_DAY + delta.seconds + delta.microseconds / 1_000_000
 
 
-def datestrToEpoch(datestrs,dateformat='%Y-%m-%dT%H:%M:%S.%fZ'):
-    """
-    Converts list of datestrings in UTCDateTime format
-    into epoch time (seconds elapsed since 01-01-1970)
+def datestr_to_epoch(datestrs, dateformat="%Y-%m-%dT%H:%M:%S.%fZ"):
+    """Convert datestrings in UTCDateTime format to epoch seconds.
+
     :param list datestrs: list of datestrings
-    :param str dateformat: date format as accepted by datetime.strptime
-    :return list floats: seconds elapsed since 01-01-1970
+    :param str dateformat: format accepted by ``datetime.strptime``
+    :return list: seconds elapsed since 1970-01-01
     """
-    #import pdb; pdb.set_trace()
-    epochlist=list()
-    SECONDS_IN_DAY=86400
-    datetime_epochstart = datetime.strptime('1970-01-01T00:00:00.00Z',
-                                            '%Y-%m-%dT%H:%M:%S.%fZ')
-    for k in range(1,len(datestrs)+1):
-        j=k-1
-        datetime_j = datetime.strptime(datestrs[j],dateformat)
-        epoch_delta = datetime_j - datetime_epochstart
-        epoch_j = epoch_delta.days*SECONDS_IN_DAY + epoch_delta.seconds + epoch_delta.microseconds/1000000
-        
-        epochlist.append(epoch_j)
-        
-    return epochlist
+    return [_delta_to_epoch(datetime.strptime(s, dateformat) - _EPOCH_START) for s in datestrs]
 
-def datetimeToEpoch(UTCdatetime_list):
+
+def datetime_to_epoch(utcdatetime_list):
+    """Convert a list of obspy ``UTCDateTime`` objects to epoch seconds.
+
+    :param list utcdatetime_list: list of ``UTCDateTime`` objects
+    :return list: seconds elapsed since 1970-01-01
     """
-    Converts list of datestrings in UTCDateTime format
-    into epoch time (seconds elapsed since 01-01-1970)
-    :param list datestrs: list of datestrings
-    :param str dateformat: date format as accepted by datetime.strptime
-    :return list floats: seconds elapsed since 01-01-1970
-    """
-    #import pdb; pdb.set_trace()
-    epochlist=list()
-    SECONDS_IN_DAY=86400
-    datetime_epochstart = datetime.strptime('1970-01-01T00:00:00.00Z',
-                                            '%Y-%m-%dT%H:%M:%S.%fZ')
-
-    #import pdb; pdb.set_trace()
-    for k in range(1,len(UTCdatetime_list)+1):
-        j=k-1
-        datetime_j = UTCdatetime_list[j]
-        epoch_delta = datetime_j.datetime - datetime_epochstart
-        epoch_j = epoch_delta.days*SECONDS_IN_DAY + epoch_delta.seconds + epoch_delta.microseconds/1000000
-        
-        epochlist.append(epoch_j)
-        
-    return epochlist
+    return [_delta_to_epoch(utc.datetime - _EPOCH_START) for utc in utcdatetime_list]
 
 
-def addEpochColumns(dataframe):
-    ENDING_STRING = "_TIME"
+def add_epoch_columns(dataframe):
+    """Add a ``<name>_EPOCH`` column for every ``<name>_TIME`` column in place."""
+    ending = "_TIME"
     for col in dataframe.columns:
-        if ENDING_STRING in col:
-            front = col[0:len(col)-len(ENDING_STRING)]
-            new_col = "%s_EPOCH" % front
-            dataframe[new_col] = datestrToEpoch(dataframe[col])
-            
+        if ending in col:
+            front = col[: len(col) - len(ending)]
+            dataframe[f"{front}_EPOCH"] = datestr_to_epoch(dataframe[col])
     return dataframe
-    
-    
-    
-    
-        
-    
-    
-    
-    
+
+
+# Backward-compatible aliases (legacy camelCase names)
+complexifyString = complexify_string
+datestrToEpoch = datestr_to_epoch
+datetimeToEpoch = datetime_to_epoch
+addEpochColumns = add_epoch_columns

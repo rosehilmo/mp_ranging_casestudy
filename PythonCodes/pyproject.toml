@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "whaletracks"
+version = "0.1.0"
+description = "Bryde's whale call detection and multipath acoustic ranging (Marianas case study)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "R. Hilmo" }]
+# Runtime dependencies are normally supplied by the conda environment
+# (see environment.yml); they are declared here so the package is also
+# installable with plain `pip install -e .`. pip skips any already
+# satisfied by conda.
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    "matplotlib",
+    "obspy",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+whaletracks-detect = "whaletracks.cli.run_detection:main"
+whaletracks-plot-ranges = "whaletracks.cli.plot_ranges:main"
+whaletracks-histogram = "whaletracks.cli.make_histogram:main"
+whaletracks-verify = "whaletracks.cli.verify_calls:main"
+whaletracks-pick = "whaletracks.cli.manual_picker:main"
+
+[tool.setuptools.packages.find]
+include = ["whaletracks*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# Legacy modules are cleaned incrementally; ignore nothing globally.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

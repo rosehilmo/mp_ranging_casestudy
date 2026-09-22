@@ -1,0 +1,21 @@
+{
+  "complexify_empty": [],
+  "complexify_nonempty": [
+    [
+      1.0,
+      2.0
+    ],
+    [
+      3.0,
+      -4.0
+    ]
+  ],
+  "datestr_to_epoch": [
+    1.0,
+    1328227200.0
+  ],
+  "datetime_to_epoch": [
+    1328227200.0,
+    10.0
+  ]
+}

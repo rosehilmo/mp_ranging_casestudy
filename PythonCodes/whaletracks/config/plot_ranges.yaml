@@ -1,0 +1,41 @@
+# Configuration for range estimation + plotting from autocorrelation multipaths.
+# Rewrite of plot_ranges_calltimings_autocorr_Brydes.py.
+#
+# Station-aware: pick a station with `--station B01` and the input/output paths
+# are filled from the templates below. Paths are resolved relative to the
+# current working directory (run from the PythonCodes directory).
+
+# Source of theoretical multipath timing-vs-distance curves:
+#   "bellhop"  - read the precomputed BELLHOP ray-arrival table for the station
+#   "analytic" - compute from the geometric ranging model (analytic block below)
+ranging_source: bellhop
+
+# BELLHOP ray-arrival tables (one per station), columns:
+#   interp_r, interp_d, interp_mp1, interp_mp2, interp_mp3
+bellhop_dir: bellhop_arrival_models
+bellhop_template: "Marianas_ray_{station}_bellhop_arrivals.csv"
+
+# Analytic ranging geometry (used only when ranging_source == analytic)
+analytic:
+  depth: 5271       # water depth (m)
+  ss: 1512          # water sound speed (m/s)
+  sed_speed: 1550   # sediment sound speed (m/s)
+  t: 419            # sediment thickness (m)
+
+reflectivity: false  # requires an interp_sub column (not in the standard tables)
+
+# Detection / autocorrelation inputs
+calls_dir: LongCall_YearPicks
+calls_template: "{station}_mp_Brydes_Year_LongCall.csv"
+auto_template: "auto_{station}_mp_Brydes_Year_LongCall.csv"
+
+# Output
+output_dir: MarianasAutoFiles
+output_template: "Marianas_auto_{station}_v2.csv"
+
+# Quality filters applied before the final scatter plot
+filters:
+  min_auto_max: 3        # keep minutes with auto_max > this
+  max_low_freq_snr: 10   # keep minutes with low_freq_snr < this
+
+ylim_km: [0, 40]         # distance-axis limits (km)
