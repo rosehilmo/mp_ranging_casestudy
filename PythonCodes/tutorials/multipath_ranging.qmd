@@ -1,0 +1,547 @@
+---
+title: "Multipath ranging with a single ocean-bottom sensor"
+subtitle: "A worked tutorial using the Marianas fin-whale case study"
+author: "Rose Hilmo"
+date: "2026-09-25"
+description: >
+  AI-generated draft (Claude, Anthropic), for review. Explains the multipath
+  ranging method for fin whales and walks through the critical parts of the
+  `whaletracks` code. All parameters and figures are derived from
+  version-controlled scripts and data in this repository.
+bibliography: references.bib
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: show
+    code-tools: true
+    theme: cosmo
+    fig-responsive: true
+    embed-resources: true
+jupyter: python3
+execute:
+  warning: false
+  cache: false
+---
+
+::: {.callout-note appearance="simple"}
+This chapter is an **AI-generated draft (Claude, Anthropic) — for review.**
+Every number and figure below is produced by executing the version-controlled
+`whaletracks` code against data in this repository; nothing is hand-entered.
+:::
+
+# Multipath ranging {#sec-multipath_ranging}
+
+The three-component (3C) method in @sec-distance_sampling estimates range from
+the *direction* a call arrives at a three-axis sensor. When only a single
+vertical channel is available — as with many ocean-bottom seismometers (OBS)
+and hydrophones — direction is not recoverable, but **range still is**, because
+a single call reaches the sensor along several paths that arrive at slightly
+different times. The spacing of those *multipath* arrivals is a fingerprint of
+how far away the animal was.
+
+This chapter explains the method and walks through the parts of the code that
+implement it, using the Marianas fin-whale deployment as the worked example.
+The method and its application to this deployment are described by
+@hilmo2024 and @hilmo2025.
+
+## Case study overview {#sec-mp_overview}
+
+The steps of the multipath ranging workflow are:
+
+1\. Read the **BELLHOP travel-time tables** relating source–receiver range to the
+spacing between consecutive arrivals — the direct path and its multipaths
+(@sec-forward_model).
+
+2\. **Detect calls** in the continuous record and score them through time
+(implemented by `whaletracks-detect`; see @sec-code_map).
+
+3\. **Measure the multipath spacing** over each 20-min window by autocorrelating
+the detection score (@sec-autocorr).
+
+4\. **Invert** each measured spacing to a range by identifying which arrival pair
+it represents (MP1−Direct, MP2−MP1, …) and matching it against those tables
+(@sec-matching, implemented by `whaletracks-plot-ranges`).
+
+5\. Assemble a **season of range estimates** and quality-control them
+(@sec-results).
+
+6\. Background and further reading (@sec-mp_reading).
+
+```{python}
+#| label: setup
+#| code-summary: "Setup: imports and repository paths"
+import os
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.io as pio
+from scipy.interpolate import interp1d
+from scipy.signal import correlate, detrend
+
+# Render figures as static images (via kaleido) rather than interactive Plotly
+# divs, so they display in every viewer — including the JupyterLab file preview,
+# which sandboxes HTML and blocks JavaScript. `show(fig, ...)` returns the image.
+pio.renderers.default = "png"
+pio.renderers["png"].scale = 2   # higher-resolution static export
+
+import whaletracks
+from whaletracks.detection import basic_ranging_model as ranging
+from whaletracks.detection.event_analyzer import EventAnalyzer
+from obspy import UTCDateTime
+
+# Locate the package root so data paths work regardless of the render CWD.
+PKG = os.path.dirname(os.path.dirname(whaletracks.__file__))
+
+def data(*parts):
+    return os.path.join(PKG, *parts)
+
+def show(fig, alt="Figure"):
+    """Return a Plotly figure for static (kaleido) rendering.
+
+    Figures are exported to static PNGs so they display in any viewer, including
+    JavaScript-sandboxed HTML previews. `alt` is kept for readability/captions."""
+    return fig
+
+print("whaletracks", whaletracks.__version__, "| package root:", PKG)
+```
+
+## The physics of multipath arrivals {#sec-mp_physics}
+
+Fin whales call near the sea surface — at depths of up to a few tens of metres
+[@hilmo2024]. Toward an OBS on the seafloor the same 20-Hz call arrives along
+several paths (@fig-raypaths):
+
+- the **direct** path (D), which travels from the whale to the OBS with no
+  reflections, and
+- a family of **multipaths** (MP1, MP2, …). MP1 reflects **once** off the
+  seafloor (or the sub-seafloor reflector) and **once** off the sea surface; MP2
+  reflects **twice** off each; in general MP*n* reflects *n* times off each
+  boundary [@hilmo2024]. (Up- and down-going surface reflections combine as a
+  Lloyd's-mirror pair; because the call is shallow, the arrival times are well
+  approximated by a single source at the surface.)
+
+Because each path is a different length, each arrives at a slightly different
+time, so the sensor records the same call several times in quick succession. The
+**delays** between these copies shrink as the animal moves farther away and the
+paths become more nearly parallel — the relationship between delay and range is
+what makes range recoverable from a single channel.
+
+Sound speed increases with depth, so the ray paths **refract away from the
+seafloor** (@fig-raypaths). The earlier arrivals leave the whale at shallower
+angles and are refracted most strongly, so **their amplitude falls as the whale
+gets farther away** [@hilmo2025]. In consequence the pair of arrivals actually
+measured changes with range: the **direct arrival weakens and drops out**, and
+the strongest two arrivals shift from *MP1 and the direct path* at close range to
+*MP2 and MP1* at longer range (@sec-matching).
+
+At the Marianas case-study site the reflecting boundary is not the true seafloor
+but a shallow, highly reflective **chert/porcellanite layer** beneath a thin,
+acoustically transparent sediment cover; the model treats the top of that layer
+as the "seafloor" and the OBS as suspended ~100 m above it [@hilmo2024;
+@hilmo2025].
+
+```{python}
+#| label: fig-raypaths
+#| fig-cap: "Schematic ray paths from a near-surface calling fin whale to the seafloor OBS (B19), after Hilmo & Wilcock (2024), Fig. 1. The direct path (D, solid) has no reflections; MP1 (dashed) reflects once off the seafloor/reflector and once off the sea surface; MP2 (dotted) reflects twice off each. × marks reflection points. Rays refract away from the seafloor (drawn as gentle curvature): the earlier arrivals leave at shallower angles, refract most, and weaken with range, so the direct arrival eventually drops out. Illustrative, not to scale."
+#| code-fold: true
+H = 5.949          # B19 OBS depth (km) — schematic, not to scale
+d = 15.0           # whale horizontal range (km)
+
+def ray(nbounce, bow=0.45, n=40):
+    """Image-source multipath from the whale (near surface) to the OBS (seafloor)
+    with `nbounce` reflections off EACH of the sea surface and the seafloor.
+    Equal-angle segments span a vertical extent of (2*nbounce+1)*H; each segment
+    bows downward (concave up) because sound speed increases with depth, so rays
+    steepen toward the surface and flatten toward the seafloor before turning."""
+    segs = 2 * nbounce + 1
+    xs = np.linspace(d, 0, segs + 1)
+    ys = [0.0] + [(-H if k % 2 else 0.0) for k in range(1, segs + 1)]  # ...ends -H (OBS)
+    px, py = [], []
+    for k in range(segs):
+        t = np.linspace(0, 1, n)
+        px += list(xs[k] + (xs[k + 1] - xs[k]) * t)
+        py += list(ys[k] + (ys[k + 1] - ys[k]) * t - bow * np.sin(np.pi * t))
+    return np.array(px), np.array(py), xs[1:-1], np.array(ys[1:-1])  # + reflection pts
+
+fig = go.Figure()
+fig.add_hline(y=0, line=dict(color="royalblue", width=2))
+fig.add_hline(y=-H, line=dict(color="saddlebrown", width=2))
+fig.add_annotation(x=d + 0.6, y=0, text="sea surface", showarrow=False, yshift=9,
+                   font=dict(color="royalblue"))
+fig.add_annotation(x=d + 0.6, y=-H, text="seafloor / chert reflector", showarrow=False,
+                   yshift=-10, font=dict(color="saddlebrown"))
+
+styles = [(0, "D (direct)", "black", "solid"),
+          (1, "MP1 (1 surface + 1 seafloor)", "seagreen", "dash"),
+          (2, "MP2 (2 surface + 2 seafloor)", "firebrick", "dot")]
+refl_x, refl_y = [], []
+for nb, name, col, dash in styles:
+    px, py, rx, ry = ray(nb)
+    fig.add_trace(go.Scatter(x=px, y=py, mode="lines", name=name,
+                             line=dict(color=col, width=2, dash=dash)))
+    refl_x += list(rx); refl_y += list(ry)
+fig.add_trace(go.Scatter(x=refl_x, y=refl_y, mode="markers",
+                         marker=dict(size=8, color="dimgray", symbol="x"), showlegend=False))
+
+fig.add_trace(go.Scatter(x=[d], y=[0], mode="markers+text", text=["fin whale"],
+                         textposition="top center", marker=dict(size=11, color="royalblue"),
+                         showlegend=False))
+fig.add_trace(go.Scatter(x=[0], y=[-H], mode="markers+text", text=["OBS"],
+                         textposition="bottom center",
+                         marker=dict(size=12, color="black", symbol="triangle-up"),
+                         showlegend=False))
+fig.add_annotation(x=0.55 * d, y=-0.45 * H,
+                   text="rays refract away from the seafloor;<br>earlier arrivals weaken with range",
+                   showarrow=False, font=dict(color="dimgray", size=11))
+fig.update_layout(xaxis_title="Horizontal range (km)", yaxis_title="Depth (km)",
+                  height=470, legend=dict(orientation="h", y=-0.25))
+fig.update_xaxes(range=[-1, d + 3])
+fig.update_yaxes(range=[-H - 0.5, 0.7])
+show(fig, "Ray-path schematic: direct, MP1 and MP2 paths from whale to OBS")
+```
+
+## Travel-time tables from BELLHOP {#sec-forward_model}
+
+Turning a measured delay into a range needs a model of how the spacing between
+consecutive arrivals varies with distance. The case study uses **BELLHOP
+ray-traced travel-time tables** — one per station in
+`data/bellhop_arrival_models/`, provided with the repository and computed for
+each site by @hilmo2024 and @hilmo2025 [@porter_bellhop]. Following those papers,
+the tables assume a **flat seafloor at the OBS depth**, a **call source 50 m
+below the sea surface**, and a **Marianas winter sound-speed profile** (World
+Ocean Atlas), tabulated at **10 m range intervals out to 40 km**. Each table
+lists the travel time of the direct path and the first three multipaths
+(`interp_d`, `interp_mp1`, `interp_mp2`, `interp_mp3`) against range
+(`interp_r`). `whaletracks-plot-ranges` reads them by default
+(`ranging_source: bellhop`); **these tables — not the straight-ray helper in
+@sec-search_window — produce the final ranges.**
+
+```{python}
+#| label: forward-model
+#| code-summary: "Load the BELLHOP table for station B19 and form the consecutive-arrival spacings"
+bh = pd.read_csv(data("data", "bellhop_arrival_models", "Marianas_ray_B19_bellhop_arrivals.csv"))
+bh_km = bh["interp_r"] / 1000
+mp1_direct = bh["interp_mp1"] - bh["interp_d"]     # MP1 - Direct
+mp2_mp1 = bh["interp_mp2"] - bh["interp_mp1"]      # MP2 - MP1
+mp3_mp2 = bh["interp_mp3"] - bh["interp_mp2"]      # MP3 - MP2
+
+print(f"B19 BELLHOP table: {len(bh)} range steps over 0-{bh_km.max():.0f} km")
+print(f"MP1-Direct spacing spans {mp1_direct.min():.2f}-{mp1_direct.max():.2f} s")
+```
+
+Each spacing shrinks with range (@fig-delay-curve): a *large* spacing means the
+whale is *close* (the paths differ a lot), a *small* spacing means it is far. The
+measured spacing (@sec-autocorr) is the gap between the **two strongest
+arrivals**, so which curve it should be matched against depends on range — the
+**MP1−Direct** curve while the direct path is strong (close in), transitioning to
+**MP2−MP1** and then **MP3−MP2** as the earlier arrivals refract away
+(@sec-matching).
+
+```{python}
+#| label: fig-delay-curve
+#| fig-cap: "BELLHOP travel-time table for B19: spacing between consecutive arrivals versus range (after Hilmo et al. 2025, Fig. 2c). At close range the strongest pair is MP1−Direct; as the earlier arrivals weaken with range, the measured spacing transitions to MP2−MP1 and MP3−MP2."
+#| code-fold: true
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=bh_km, y=mp1_direct, mode="lines", name="MP1 − Direct",
+                         line=dict(color="seagreen", width=3)))
+fig.add_trace(go.Scatter(x=bh_km, y=mp2_mp1, mode="lines", name="MP2 − MP1",
+                         line=dict(color="darkorange", width=2)))
+fig.add_trace(go.Scatter(x=bh_km, y=mp3_mp2, mode="lines", name="MP3 − MP2",
+                         line=dict(color="mediumvioletred", width=2)))
+fig.update_layout(xaxis_title="Range (km)", yaxis_title="Arrival-time spacing (s)",
+                  height=420, legend=dict(orientation="h", y=-0.2))
+show(fig, "BELLHOP consecutive-arrival spacing versus range for B19")
+```
+
+### Inverting a measured spacing {#sec-invert_demo}
+
+Inversion is a nearest-point lookup on the appropriate curve. Suppose a nearby
+call shows an MP1−Direct spacing of 5.0 s:
+
+```{python}
+#| label: invert-demo
+measured_spacing = 5.0  # seconds
+idx = int(np.argmin(np.abs(mp1_direct.values - measured_spacing)))
+print(f"A {measured_spacing:.1f} s MP1-Direct spacing -> range {bh['interp_r'].iloc[idx] / 1000:.2f} km")
+```
+
+This nearest-neighbour search is what the range-estimation code does for every
+call (@sec-matching), matching the measured spacing against the BELLHOP
+MP1−Direct, MP2−MP1 and MP3−MP2 curves and keeping the closest — after deciding,
+from the arrival amplitudes, which pair was measured.
+
+## The straight-ray search-window helper {#sec-search_window}
+
+Before ranging, the detector needs to know *where in time* to look for the
+multipaths behind each call. That is the only job of `basic_ranging` in
+`whaletracks/detection/basic_ranging_model.py`: a **first-order straight-ray
+geometrical calculation** — constant-sound-speed water column plus a sediment
+layer, no refraction — that estimates roughly how late the multipaths can fall.
+It is **not** used for the final ranges. In `run_detection.py` its predicted
+latest sub-seafloor arrival sets the search window `dt_down = max(mp_interp − t0)
++ 0.2 s`.
+
+```{python}
+#| label: search-window
+#| code-summary: "Run the straight-ray helper for B19 and read off the search window"
+# Station B19 geometry (from data/Station_info_Marianas.csv)
+depth, water_ss, sed_ss = 5949.0, 1512.0, 1512.0
+thickness = 6099.0 - depth   # reflector depth - instrument depth (m)
+
+distance, t0, t1, t2, t3, d_interp, mp_interp, mp_interp2 = ranging.basic_ranging(
+    depth, water_ss, sed_ss, thickness, plotflag=False
+)
+dt_down = max(np.subtract(mp_interp, t0)) + 0.2
+print(f"straight-ray multipath search window dt_down = {dt_down:.2f} s")
+```
+
+Because it ignores refraction, the straight-ray spacings are only approximate —
+good enough to bound the search window, but the BELLHOP table (@sec-forward_model)
+is what sets the ranges.
+
+## Measuring the delays: autocorrelation of the detection score {#sec-autocorr}
+
+We never see the individual arrivals labelled; we see one noisy waveform in which
+each call appears as a cluster of closely spaced copies. The approach used by
+`whaletracks-detect` — the one @hilmo2024 found most robust — is to
+**autocorrelate the detection score** over a **20-minute window**
+(`chunk_length_s: 1200` in `config/detect_fin.yaml`). A 20-min window is long
+enough to raise the faint multipaths above the noise, yet short enough to limit
+smearing from the whale's own motion [@hilmo2024]. The largest autocorrelation
+peak at a feasible multipath lag gives the spacing between the two
+strongest arrivals, without ever isolating individual arrivals.
+
+The detection score itself is the product of cross-correlating a **synthetic
+down-swept template** with the spectrogram (Mellinger & Clark method;
+`detect_calls.py`, see @sec-code_map). @hilmo2024 use a generalised 1-s template
+sweeping 25→15 Hz with a 3-Hz bandwidth, then **refine it per site** toward the
+**lower-frequency** end of the call — the multipaths are enriched in low
+frequencies because the seafloor reflection attenuates the higher ones (roughly
+as frequency squared). The Marianas template sweeps ≈20→15 Hz over 0.8 s
+(`kernel:` block in `config/detect_fin.yaml`). Here we demonstrate the
+autocorrelation step on a **synthetic** minute whose delays we know, so the
+recovered value can be checked.
+
+```{python}
+#| label: synth-autocorr
+#| code-summary: "Build a synthetic detection-score minute and autocorrelate it"
+fs = 10.0                       # detection-score sample rate (Hz)
+tt = np.arange(0, 60.0, 1 / fs)
+true_delay = 1.6                # seconds between successive arrivals
+rng = np.random.default_rng(1)
+score = 0.05 * rng.standard_normal(len(tt))
+# three calls, each: direct + two multipath echoes at multiples of true_delay
+for onset in (12.0, 30.0, 47.0):
+    for lag, amp in ((0.0, 1.0), (true_delay, 0.6), (2 * true_delay, 0.3)):
+        score += amp * np.exp(-0.5 * ((tt - (onset + lag)) / 0.15) ** 2)
+
+# Mirror the pipeline: upsample 10x, remove the mean, autocorrelate.
+hi_t = np.linspace(tt.min(), tt.max(), len(tt) * 10)
+hi = detrend(interp1d(tt, score, kind="cubic")(hi_t), type="constant")
+corr = correlate(hi, hi)
+lags = (np.arange(corr.size) - (len(hi) - 1)) * (hi_t[1] - hi_t[0])
+pos = lags >= 0
+lags_pos, corr_pos = lags[pos], corr[pos] / corr.max()
+
+window = (lags_pos > 0.5) & (lags_pos < 5)
+peak_lag = lags_pos[window][np.argmax(corr_pos[window])]
+print(f"true multipath delay = {true_delay:.2f} s; "
+      f"recovered from autocorrelation peak = {peak_lag:.2f} s")
+```
+
+```{python}
+#| label: fig-autocorr
+#| fig-cap: "Top: a synthetic detection-score minute with three calls, each arriving as a direct pulse plus two multipath echoes spaced 1.6 s apart. Bottom: the autocorrelation, whose first strong peak recovers the 1.6 s multipath delay."
+#| code-fold: true
+from plotly.subplots import make_subplots
+
+fig = make_subplots(rows=2, cols=1, subplot_titles=("Detection score", "Autocorrelation"))
+fig.add_trace(go.Scatter(x=tt, y=score, mode="lines", line=dict(color="steelblue"),
+                         showlegend=False), row=1, col=1)
+fig.add_trace(go.Scatter(x=lags_pos, y=corr_pos, mode="lines", line=dict(color="indigo"),
+                         showlegend=False), row=2, col=1)
+fig.add_vline(x=true_delay, line=dict(color="firebrick", dash="dash"), row=2, col=1)
+fig.add_annotation(x=true_delay, y=0.6, text=f"delay = {true_delay} s", showarrow=True,
+                   arrowhead=2, row=2, col=1, font=dict(color="firebrick"))
+fig.update_xaxes(title_text="Time (s)", row=1, col=1)
+fig.update_xaxes(title_text="Lag (s)", range=[0, 8], row=2, col=1)
+fig.update_layout(height=520)
+show(fig, "Synthetic detection score and its autocorrelation recovering the spacing")
+```
+
+In the real pipeline the peaks of this autocorrelation are picked by
+`EventAnalyzer.mp_picker` (`whaletracks/detection/event_analyzer.py`), which
+wraps `scipy.signal.find_peaks` and returns the five strongest arrivals as a
+one-row "multipath" table (`arrival_1 … arrival_5`). The same class first picks
+the calls themselves:
+
+```{python}
+#| label: event-analyzer
+analyzer = EventAnalyzer(
+    tt, score, UTCDateTime("2012-01-01T00:00:00"),
+    dur=0.5, prominence=0.1, distance=1, rel_height=0.5,
+)
+print("EventAnalyzer picked", len(analyzer.df), "calls in the synthetic minute")
+```
+
+## From spacing to range {#sec-matching}
+
+`whaletracks/cli/plot_ranges.py` closes the loop. For each 20-minute window it
+takes the measured spacing and, for the BELLHOP MP1−Direct, MP2−MP1 and MP3−MP2
+curves, finds the range whose modelled spacing is closest (the nearest-point
+inversion from @sec-invert_demo). The essential lines are:
+
+```python
+near_timings = [abs(mp - mp_timing) for mp in mp_1_timing]   # |model - measured|
+match_ind    = near_timings.index(min(near_timings))         # closest range
+best_distance = distance[match_ind]                          # metres
+```
+
+The subtlety — and the main source of ranging error — is deciding **which pair
+of arrivals** the spacing represents. Close to the OBS the direct path is strong
+and the spacing is **MP1−Direct**; farther out the direct arrival refracts away
+and the strongest pair becomes **MP2−MP1** (then MP3−MP2). @hilmo2024 identify
+MP1−Direct within ~5 km with a call-amplitude threshold, and note that the
+autocorrelation returns MP1−Direct as long as the direct or MP1 amplitude exceeds
+MP2; beyond ~14 km the measured spacing is MP2−MP1. @hilmo2025 add a
+semi-automated step that selects the timing-model hypothesis so ranges change
+smoothly. Running this over a whole deployment yields a range estimate for every
+qualifying minute.
+
+## Results: a season of ranges {#sec-results}
+
+The committed output `data/fin_whale/Marianas_auto_B19_v2.csv` is the result
+of the steps above for station B19 — the Marianas OBS featured in both papers —
+over its ~11-month deployment (fin whales, Feb 2012–Feb 2013). Following
+@hilmo2025, a range is attempted for a given minute **only when at least 2 calls
+fall in that minute and at least 10 calls fall in the surrounding 20-minute
+window** (`ranging.min_center` / `min_window` in `config/detect_fin.yaml`).
+@fig-ranges shows the range estimate through time.
+
+```{python}
+#| label: fig-ranges
+#| fig-cap: "Estimated range (from the MP1−Direct model) to calling fin whales at station B19 across the deployment, coloured by the dB amplitude of the strongest arrival."
+#| code-fold: true
+ranges = pd.read_csv(data("data", "fin_whale", "Marianas_auto_B19_v2.csv"))
+ranges["time"] = pd.to_datetime(ranges["time"])
+keep = ranges[ranges["auto_max"] > 3]
+
+fig = go.Figure()
+fig.add_trace(go.Scatter(
+    x=keep["time"], y=keep["range_D_MP1"], mode="markers",
+    marker=dict(size=4, color=keep["auto_amp"], colorscale="Viridis",
+                colorbar=dict(title="dB")),
+))
+fig.update_layout(xaxis_title="Date", yaxis_title="Range (km, MP1−Direct model)",
+                  height=430, yaxis_range=[0, 40])
+show(fig, "Estimated range to fin whales at B19 across the deployment")
+```
+
+The seasonal structure — clustering of nearby detections during some intervals
+and sparse, distant ones in others — is the kind of pattern that feeds density
+estimation (@sec-distance_sampling). @hilmo2025 ranged fin-whale calls to 40 km
+across the seven Marianas OBS (March 2012–January 2013; February 2012 was
+excluded because airgun shots from a seismic survey prevented ranging) and
+applied point-transect distance sampling to estimate call densities.
+
+## Assumptions and limitations {#sec-mp_limitations}
+
+These are the challenges @hilmo2024 and @hilmo2025 identify — they bound where
+the method can be trusted:
+
+- **Multipath identification.** The largest error source is deciding whether the
+  measured spacing is MP1−Direct or MP2−MP1 (@sec-matching). A call-amplitude
+  threshold resolves this within ~5 km, but at longer ranges amplitude is not a
+  reliable discriminator and the two hypotheses must be chosen between by
+  inspecting spectrograms or with the semi-automated selection of @hilmo2025.
+
+- **Subsurface reflections.** At sedimented sites the reflecting boundary is a
+  sub-seafloor layer whose depth is uncertain. At Marianas, accuracy is limited
+  by uncertainty in the chert-reflector depth (sediment thickening toward the
+  trench, undulations, and faults); the case study assumes a reflector 100 m
+  below the seafloor, within the 30–200 m range of regional estimates. Thickly
+  sedimented sites need explicit subsurface modelling (Snell's law, or full
+  reflectivity where several reflectors exist) rather than a single water
+  multipath model.
+
+- **Bathymetric relief.** The travel-time tables assume a flat seafloor at the
+  OBS depth. Relief perturbs path lengths and can cause large errors — up to
+  ~10 km at the mountainous Hawaii site — and, more subtly, the Marianas seafloor
+  deepens toward the trench, so disagreement with the flat model grows with
+  range. @hilmo2025 excluded OBS on mountainous bathymetry for this reason.
+
+- **Closely spaced calls (IPI vs. multipath window).** Fin whales call in regular
+  sequences (inter-pulse intervals of ~15–25 s at Marianas). If the call spacing
+  — or the short spacing of doublet songs — falls inside the multipath search
+  window, it can be mistaken for a multipath. The window is bounded to avoid this,
+  which also caps the maximum range (sei doublets in Puerto Rico limited ranging
+  to ≤12 km).
+
+- **Chorusing.** When two or more whales sing at once, elevated band noise
+  obscures the faint multipaths and distinct calls from a second whale break the
+  ranging outright — this all but prevented ranging at the Alaska site. The method
+  assumes effectively one singer at a time.
+
+- **Lloyd's-mirror interference.** At specific ranges (~8.5, 10.5, 12.5 km in the
+  reflectivity model, assuming a 50 m call depth) destructive interference can
+  null the direct arrival and produce spurious ranges for stationary or
+  slow-moving whales; combining calls over the 20-min window mitigates this for
+  moving animals, and it is not a concern beyond ~14 km where the spacing is
+  MP2−MP1.
+
+- **Usable range and call vs. animal density.** Single-station Marianas ranges
+  were reliable to ~20 km [@hilmo2024]; the density application pooled across the
+  seven OBS reached 40 km [@hilmo2025]. Ranging yields *call* densities;
+  converting to *animal* densities needs independent knowledge of calling (cue)
+  rates, which vary by region and season.
+
+## Where this lives in the code {#sec-code_map}
+
+| Step | Module / command |
+|------|------------------|
+| Travel-time tables (used for final ranges) | `data/bellhop_arrival_models/` + `plot_ranges.py` |
+| Straight-ray search-window helper | `whaletracks/detection/basic_ranging_model.py` (called by `run_detection.py`) |
+| Spectrogram, kernel, detection score | `whaletracks/detection/detect_calls.py` |
+| Call & multipath picking | `whaletracks/detection/event_analyzer.py` |
+| End-to-end detection + autocorrelation | `whaletracks-detect` (`cli/run_detection.py`) |
+| Delay → range + plots | `whaletracks-plot-ranges` (`cli/plot_ranges.py`) |
+
+Run parameters for each command live in `whaletracks/config/*.yaml`; see the
+package `README.md` for setup and usage.
+
+## Exercises {#sec-mp_exercises}
+
+1\. Load the B01 BELLHOP table
+(`data/bellhop_arrival_models/Marianas_ray_B01_bellhop_arrivals.csv`) and compare
+its MP1−Direct spacing curve with B19's from @sec-forward_model. How does the
+shallower station (5321 m vs 5949 m) shift the curve?
+
+2\. In @sec-invert_demo, what range does a 3.0 s MP1−Direct spacing imply for B19
+under the BELLHOP table versus the straight-ray helper of @sec-search_window? Why
+do they differ, and why does only the BELLHOP answer count?
+
+3\. In the synthetic demo (@sec-autocorr), lower the echo amplitudes or raise the
+noise level until the autocorrelation peak is no longer recoverable. What
+signal-to-noise ratio is the practical limit?
+
+## Background and further reading {#sec-mp_reading}
+
+- The multipath ranging method — forward model, detection template, and the
+  autocorrelation-based delay measurement — is developed in full by
+  @hilmo2024, which applies it to fin whales at Marianas, Hawaii, Alaska, and
+  the US East Coast.
+- Its application to fin-whale call density in the Marianas region, including
+  the distance-sampling step, is @hilmo2025 (open access, CC-BY 4.0).
+- The analytic multipath geometry and the autocorrelation step are also
+  documented inline in `basic_ranging_model.py` and `detect_calls.py`.
+- BELLHOP ray tracing: @porter_bellhop.
+- Passive acoustic density estimation from ranges: see @sec-distance_sampling
+  in this document.
+
+## References {#sec-mp_references}
+
+::: {#refs}
+:::

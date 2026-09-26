@@ -16,6 +16,11 @@ dependencies:
   # Tutorials (interactive, student-facing figures) + doc rendering
   - plotly
   - quarto
+  # Static-image export for the tutorial's <noscript> figure fallbacks (so
+  # figures also show in JS-blocked viewers like the JupyterLab file preview).
+  # kaleido >=1 needs a Chrome/Chromium; after `conda env create`, run once:
+  #   kaleido_get_chrome        (or: python -c "import kaleido; kaleido.get_chrome_sync()")
+  - kaleido
   # Dev tooling
   - pytest
   - ruff
