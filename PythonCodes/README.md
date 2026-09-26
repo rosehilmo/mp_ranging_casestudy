@@ -1,10 +1,10 @@
 *AI-generated draft (Claude, Anthropic) — for review. All parameters and figures are derived from version-controlled scripts and data.*
 
-# whaletracks — Bryde's whale multipath ranging (Marianas case study)
+# whaletracks — fin & Bryde's whale multipath ranging (Marianas case study)
 
-Detection of Bryde's whale calls from ocean-bottom seismometer / hydrophone
-data and estimation of whale-to-station range from the timing of multipath
-acoustic arrivals.
+Detection of fin and Bryde's whale calls from ocean-bottom seismometer /
+hydrophone data and estimation of whale-to-station range from the timing of
+multipath acoustic arrivals.
 
 The `whaletracks` package is the modernized, config-driven form of the original
 scripts: a shared library core, five command-line entry points, and YAML
@@ -30,7 +30,7 @@ whaletracks/
   common/      constants.py, util.py          # shared constants + conversions
   detection/   detect_calls.py                 # spectrogram / kernel / cross-correlation
                event_analyzer.py               # peak picking -> detection DataFrames
-               basic_ranging_model.py          # analytic multipath travel-time model
+               basic_ranging_model.py          # analytic straight-ray helper (sets multipath search window)
                manual_picking.py               # helpers for the manual picker (distinct math)
   cli/         run_detection.py                # automated detection + ranging
                plot_ranges.py                  # range estimation + plots
@@ -40,12 +40,12 @@ whaletracks/
   config/      detect_fin.yaml, detect_brydes.yaml   # detection configs (per species)
                ranges_fin.yaml, ranges_brydes.yaml   # range-estimation configs
                verify_calls.yaml, manual_picker.yaml
-               Station_info_Marianas_Brydes.csv
 tests/         golden-master + regression tests
 data/
-  bellhop_arrival_models/   per-station BELLHOP ray-arrival tables (shared)
-  brydes_whale/             Bryde's detections + range outputs
-  fin_whale/                fin detections + range outputs
+  Station_info_Marianas.csv   shared station table (7 published good-data OBS, both species)
+  bellhop_arrival_models/     per-station BELLHOP ray-arrival tables (shared)
+  brydes_whale/               Bryde's detections + range outputs (+ All_Brydes_verified.csv)
+  fin_whale/                  fin detections + range outputs
 ```
 
 The same pipeline ranges to either species; the two `detect_*.yaml` /
