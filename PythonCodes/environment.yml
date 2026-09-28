@@ -16,15 +16,17 @@ dependencies:
   # Tutorials (interactive, student-facing figures) + doc rendering
   - plotly
   - quarto
-  # Static-image export for the tutorial's <noscript> figure fallbacks (so
-  # figures also show in JS-blocked viewers like the JupyterLab file preview).
-  # kaleido >=1 needs a Chrome/Chromium; after `conda env create`, run once:
-  #   kaleido_get_chrome        (or: python -c "import kaleido; kaleido.get_chrome_sync()")
-  - kaleido
   # Dev tooling
   - pytest
   - ruff
   # Editable install of the local `whaletracks` package (pyproject.toml)
   - pip
   - pip:
+      # Static-image export for the tutorial's static figures (so they also show
+      # in JS-blocked viewers like the JupyterLab file preview). Must be pip, not
+      # conda: plotly >=6 needs kaleido >=1, which conda-forge does not provide
+      # (its `python-kaleido` is 0.2.1, incompatible). kaleido >=1 needs a
+      # Chrome/Chromium; after `conda env create`, run once:
+      #   kaleido_get_chrome     (or: python -c "import kaleido; kaleido.get_chrome_sync()")
+      - kaleido
       - -e .

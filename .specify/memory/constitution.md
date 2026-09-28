@@ -166,7 +166,12 @@ threshold variations) is documented as a deliberate, reviewed deviation.
 - **Exploratory / student-facing (tutorial) figures**: Plotly (interactive
   hover/zoom).
 - **Image display in notebooks**: matplotlib `imshow`.
-- Spectrograms: perceptually uniform colormap; colorbar labelled with units;
+- **Colour accessibility**: all figures must be colourblind-safe. Categorical /
+  line series use the Okabe–Ito qualitative palette (avoid red–green pairings),
+  and colour is never the *only* distinguishing channel — also vary line style
+  (solid/dash/dot), marker, or direct labels so the figure reads in greyscale.
+- Continuous / sequential data (spectrograms, scatter colour scales) use a
+  perceptually uniform colormap (e.g. viridis); colorbar labelled with units;
   time in UTC, frequency in Hz.
 - AI-drafted captions/markdown carry the disclosure label (tutorial uses the YAML
   metadata + header-callout form).

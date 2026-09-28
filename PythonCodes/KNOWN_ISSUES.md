@@ -89,6 +89,19 @@ rather than preserve a broken branch.
 (`"HHZ,EHZ,ELZ,BHZ,EDH"`) in the CSV `channel` column instead of the channel
 actually returned by the waveform request. Preserved.
 
+## 10. BELLHOP arrival tables — degenerate near-field rows (data, not code)
+The provided ray tables in `data/bellhop_arrival_models/` (e.g.
+`Marianas_ray_B19_bellhop_arrivals.csv`) have degenerate entries at very short
+range where the higher multipaths are not well defined: for B19 the
+`interp_mp3` time is spurious at range 0–10 m (e.g. −144 s and −17 s), and the
+MP2−MP1 / MP3−MP2 spacings show scattered near-field spikes/dips out to ~230 m.
+`interp_mp1 − interp_d` (MP1−Direct) is clean throughout. This does not affect
+ranging — no whale is ranged that close, and within the critical range the
+measured pair is MP1−Direct regardless — so the tables are left untouched
+(preserve-exactly). The tutorial's delay-curve figure omits range < 0.3 km for
+this reason; any future code that consumes these tables at sub-km range should
+guard against the near-field rows.
+
 
 ## Species-agnostic unification (fin + Bryde's) — deliberate decisions
 

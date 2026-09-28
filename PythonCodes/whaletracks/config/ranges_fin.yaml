@@ -17,10 +17,12 @@ analytic:
 
 reflectivity: false
 
-# Fin detection / autocorrelation inputs (standardized names)
+# Fin detection / autocorrelation inputs.
+# calls  = per-call detections (peak_time); auto = per-window autocorrelation
+# timings (arrival_1..5). B19 is the worked station shipped with the repo.
 calls_dir: data/fin_whale
 calls_template: "{station}_mp.csv"
-auto_template: "auto_{station}_mp.csv"
+auto_template: "Marianas_auto_{station}_mp_v2.csv"
 
 output_dir: data/fin_whale
 output_template: "Marianas_auto_{station}_v2.csv"

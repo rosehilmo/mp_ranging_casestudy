@@ -33,13 +33,23 @@ Every number and figure below is produced by executing the version-controlled
 
 # Multipath ranging {#sec-multipath_ranging}
 
-The three-component (3C) method in @sec-distance_sampling estimates range from
-the *direction* a call arrives at a three-axis sensor. When only a single
-vertical channel is available — as with many ocean-bottom seismometers (OBS)
-and hydrophones — direction is not recoverable, but **range still is**, because
-a single call reaches the sensor along several paths that arrive at slightly
-different times. The spacing of those *multipath* arrivals is a fingerprint of
-how far away the animal was.
+Most ocean-bottom seismometers (OBS) record three components, so the
+three-component (3C) method of @sec-distance_sampling is usually available: it
+recovers a call's range from the *direction* of the direct arrival at the
+three-axis sensor. Its reach is limited, though. 3C ranging
+works only for whales at **close range** — within the critical range of the
+seafloor reflection — and it performs well over **soft sediments** but poorly
+over **hard rock**.
+
+Multipath ranging fills those gaps. A single call reaches the sensor along
+several paths — a direct path plus a family of reflected *multipaths* — that
+arrive at slightly different times, and the spacing of those arrivals is a
+fingerprint of how far away the animal was. That spacing can be recovered from
+even a single channel, stays measurable well **beyond the critical range**, and
+— unlike 3C — is clearest where the seafloor is a **strong reflector** (hard
+rock rather than soft sediment). Multipath ranging therefore **extends
+monitoring to a much larger area** and suits exactly the hard-bottom sites where
+3C performs poorly.
 
 This chapter explains the method and walks through the parts of the code that
 implement it, using the Marianas fin-whale deployment as the worked example.
@@ -50,19 +60,19 @@ The method and its application to this deployment are described by
 
 The steps of the multipath ranging workflow are:
 
-1\. Read the **BELLHOP travel-time tables** relating source–receiver range to the
+1\. **Detect calls** in the continuous record and score them through time
+(implemented by `whaletracks-detect`; see @sec-code_map).
+
+2\. **Measure the multipath spacing** over each 20-min window by autocorrelating
+the detection score (@sec-autocorr).
+
+3\. Read the **BELLHOP travel-time tables** relating source–receiver range to the
 spacing between consecutive arrivals — the direct path and its multipaths
 (@sec-forward_model).
 
-2\. **Detect calls** in the continuous record and score them through time
-(implemented by `whaletracks-detect`; see @sec-code_map).
-
-3\. **Measure the multipath spacing** over each 20-min window by autocorrelating
-the detection score (@sec-autocorr).
-
 4\. **Invert** each measured spacing to a range by identifying which arrival pair
-it represents (MP1−Direct, MP2−MP1, …) and matching it against those tables
-(@sec-matching, implemented by `whaletracks-plot-ranges`).
+it represents (MP1−Direct, MP2−MP1, …) and matching it against those BELLHOP
+tables (@sec-matching, implemented by `whaletracks-plot-ranges`).
 
 5\. Assemble a **season of range estimates** and quality-control them
 (@sec-results).
@@ -86,6 +96,12 @@ from scipy.signal import correlate, detrend
 # which sandboxes HTML and blocks JavaScript. `show(fig, ...)` returns the image.
 pio.renderers.default = "png"
 pio.renderers["png"].scale = 2   # higher-resolution static export
+
+# Okabe-Ito colourblind-safe qualitative palette (constitution Figure Standards).
+# Line series also vary dash style so the figures read in greyscale.
+CB = {"black": "#000000", "orange": "#E69F00", "skyblue": "#56B4E9",
+      "green": "#009E73", "yellow": "#F0E442", "blue": "#0072B2",
+      "vermillion": "#D55E00", "purple": "#CC79A7"}
 
 import whaletracks
 from whaletracks.detection import basic_ranging_model as ranging
@@ -111,8 +127,8 @@ print("whaletracks", whaletracks.__version__, "| package root:", PKG)
 ## The physics of multipath arrivals {#sec-mp_physics}
 
 Fin whales call near the sea surface — at depths of up to a few tens of metres
-[@hilmo2024]. Toward an OBS on the seafloor the same 20-Hz call arrives along
-several paths (@fig-raypaths):
+[@watkins1987; @stimpert2015]. Toward an OBS on the seafloor the same 20-Hz call
+arrives along several paths (@fig-raypaths):
 
 - the **direct** path (D), which travels from the whale to the OBS with no
   reflections, and
@@ -145,20 +161,30 @@ as the "seafloor" and the OBS as suspended ~100 m above it [@hilmo2024;
 
 ```{python}
 #| label: fig-raypaths
-#| fig-cap: "Schematic ray paths from a near-surface calling fin whale to the seafloor OBS (B19), after Hilmo & Wilcock (2024), Fig. 1. The direct path (D, solid) has no reflections; MP1 (dashed) reflects once off the seafloor/reflector and once off the sea surface; MP2 (dotted) reflects twice off each. × marks reflection points. Rays refract away from the seafloor (drawn as gentle curvature): the earlier arrivals leave at shallower angles, refract most, and weaken with range, so the direct arrival eventually drops out. Illustrative, not to scale."
+#| fig-cap: "Schematic ray paths from a calling fin whale to the seafloor OBS (B20), after Hilmo & Wilcock (2024), Fig. 1. The whale calls just below the sea surface; the OBS rests on the seafloor a short distance above the sub-seafloor chert reflector, off which the multipaths reflect. The direct path (D, solid) has no reflections; MP1 (dashed) reflects once off the reflector and once off the sea surface; MP2 (dotted) reflects twice off each. × marks reflection points. Rays refract away from the seafloor (drawn as gentle curvature): the earlier arrivals leave at shallower angles, refract most, and weaken with range, so the direct arrival eventually drops out. Illustrative, not to scale; the whale depth and the OBS-to-reflector offset are exaggerated for clarity."
 #| code-fold: true
-H = 5.949          # B19 OBS depth (km) — schematic, not to scale
-d = 15.0           # whale horizontal range (km)
+H_sf = 5.563         # B20 seafloor / OBS depth (km) — schematic, not to scale
+refl_gap = 0.45      # OBS sits this far above the sub-seafloor reflector
+H_refl = H_sf + refl_gap   # sub-seafloor chert reflector (exaggerated for clarity)
+whale_depth = 0.30   # whale calls just below the sea surface (exaggerated)
+d = 15.0             # whale horizontal range (km)
 
 def ray(nbounce, bow=0.45, n=40):
-    """Image-source multipath from the whale (near surface) to the OBS (seafloor)
-    with `nbounce` reflections off EACH of the sea surface and the seafloor.
-    Equal-angle segments span a vertical extent of (2*nbounce+1)*H; each segment
-    bows downward (concave up) because sound speed increases with depth, so rays
-    steepen toward the surface and flatten toward the seafloor before turning."""
+    """Image-source multipath from the whale (just below the surface) to the OBS
+    on the seafloor, with `nbounce` reflections off EACH of the sea surface and
+    the sub-seafloor reflector. The OBS rests a short distance ABOVE that
+    reflector, so the interior bottom bounces touch the reflector while the ray's
+    final leg ends at the OBS. Segments bow downward (concave up) because sound
+    speed increases with depth: rays steepen toward the surface and flatten
+    toward the seafloor before turning."""
     segs = 2 * nbounce + 1
     xs = np.linspace(d, 0, segs + 1)
-    ys = [0.0] + [(-H if k % 2 else 0.0) for k in range(1, segs + 1)]  # ...ends -H (OBS)
+    ys = [-whale_depth]                              # whale, just below the surface
+    for k in range(1, segs + 1):
+        if k % 2 == 1:                              # a bottom-side vertex
+            ys.append(-H_sf if k == segs else -H_refl)  # final = OBS; interior = reflector
+        else:                                       # a surface-side vertex
+            ys.append(0.0)
     px, py = [], []
     for k in range(segs):
         t = np.linspace(0, 1, n)
@@ -168,15 +194,18 @@ def ray(nbounce, bow=0.45, n=40):
 
 fig = go.Figure()
 fig.add_hline(y=0, line=dict(color="royalblue", width=2))
-fig.add_hline(y=-H, line=dict(color="saddlebrown", width=2))
+fig.add_hline(y=-H_sf, line=dict(color="saddlebrown", width=2))
+fig.add_hline(y=-H_refl, line=dict(color="sienna", width=2, dash="dash"))
 fig.add_annotation(x=d + 0.6, y=0, text="sea surface", showarrow=False, yshift=9,
                    font=dict(color="royalblue"))
-fig.add_annotation(x=d + 0.6, y=-H, text="seafloor / chert reflector", showarrow=False,
-                   yshift=-10, font=dict(color="saddlebrown"))
+fig.add_annotation(x=d + 0.6, y=-H_sf, text="seafloor (OBS)", showarrow=False, yshift=9,
+                   font=dict(color="saddlebrown"))
+fig.add_annotation(x=d + 0.6, y=-H_refl, text="sub-seafloor chert reflector",
+                   showarrow=False, yshift=-10, font=dict(color="sienna"))
 
-styles = [(0, "D (direct)", "black", "solid"),
-          (1, "MP1 (1 surface + 1 seafloor)", "seagreen", "dash"),
-          (2, "MP2 (2 surface + 2 seafloor)", "firebrick", "dot")]
+styles = [(0, "D (direct)", CB["black"], "solid"),
+          (1, "MP1 (1 surface + 1 reflector)", CB["orange"], "dash"),
+          (2, "MP2 (2 surface + 2 reflector)", CB["purple"], "dot")]
 refl_x, refl_y = [], []
 for nb, name, col, dash in styles:
     px, py, rx, ry = ray(nb)
@@ -186,20 +215,20 @@ for nb, name, col, dash in styles:
 fig.add_trace(go.Scatter(x=refl_x, y=refl_y, mode="markers",
                          marker=dict(size=8, color="dimgray", symbol="x"), showlegend=False))
 
-fig.add_trace(go.Scatter(x=[d], y=[0], mode="markers+text", text=["fin whale"],
-                         textposition="top center", marker=dict(size=11, color="royalblue"),
+fig.add_trace(go.Scatter(x=[d], y=[-whale_depth], mode="markers+text", text=["fin whale"],
+                         textposition="middle left", marker=dict(size=11, color="royalblue"),
                          showlegend=False))
-fig.add_trace(go.Scatter(x=[0], y=[-H], mode="markers+text", text=["OBS"],
-                         textposition="bottom center",
+fig.add_trace(go.Scatter(x=[0], y=[-H_sf], mode="markers+text", text=["OBS"],
+                         textposition="top center",
                          marker=dict(size=12, color="black", symbol="triangle-up"),
                          showlegend=False))
-fig.add_annotation(x=0.55 * d, y=-0.45 * H,
+fig.add_annotation(x=0.55 * d, y=-0.45 * H_sf,
                    text="rays refract away from the seafloor;<br>earlier arrivals weaken with range",
                    showarrow=False, font=dict(color="dimgray", size=11))
 fig.update_layout(xaxis_title="Horizontal range (km)", yaxis_title="Depth (km)",
                   height=470, legend=dict(orientation="h", y=-0.25))
 fig.update_xaxes(range=[-1, d + 3])
-fig.update_yaxes(range=[-H - 0.5, 0.7])
+fig.update_yaxes(range=[-H_refl - 0.5, 0.7])
 show(fig, "Ray-path schematic: direct, MP1 and MP2 paths from whale to OBS")
 ```
 
@@ -221,14 +250,14 @@ lists the travel time of the direct path and the first three multipaths
 
 ```{python}
 #| label: forward-model
-#| code-summary: "Load the BELLHOP table for station B19 and form the consecutive-arrival spacings"
-bh = pd.read_csv(data("data", "bellhop_arrival_models", "Marianas_ray_B19_bellhop_arrivals.csv"))
+#| code-summary: "Load the BELLHOP table for station B20 and form the consecutive-arrival spacings"
+bh = pd.read_csv(data("data", "bellhop_arrival_models", "Marianas_ray_B20_bellhop_arrivals.csv"))
 bh_km = bh["interp_r"] / 1000
 mp1_direct = bh["interp_mp1"] - bh["interp_d"]     # MP1 - Direct
 mp2_mp1 = bh["interp_mp2"] - bh["interp_mp1"]      # MP2 - MP1
 mp3_mp2 = bh["interp_mp3"] - bh["interp_mp2"]      # MP3 - MP2
 
-print(f"B19 BELLHOP table: {len(bh)} range steps over 0-{bh_km.max():.0f} km")
+print(f"B20 BELLHOP table: {len(bh)} range steps over 0-{bh_km.max():.0f} km")
 print(f"MP1-Direct spacing spans {mp1_direct.min():.2f}-{mp1_direct.max():.2f} s")
 ```
 
@@ -242,24 +271,40 @@ arrivals**, so which curve it should be matched against depends on range — the
 
 ```{python}
 #| label: fig-delay-curve
-#| fig-cap: "BELLHOP travel-time table for B19: spacing between consecutive arrivals versus range (after Hilmo et al. 2025, Fig. 2c). At close range the strongest pair is MP1−Direct; as the earlier arrivals weaken with range, the measured spacing transitions to MP2−MP1 and MP3−MP2."
+#| fig-cap: "BELLHOP travel-time table for B20: spacing between consecutive arrivals versus range (after Hilmo et al. 2025, Fig. 2c). At close range the strongest pair is MP1−Direct; as the earlier arrivals weaken with range, the measured spacing transitions to MP2−MP1 and MP3−MP2."
 #| code-fold: true
+def physical(spacing):
+    """Drop degenerate near-field BELLHOP entries (range < 0.3 km). Close to the
+    station the higher multipaths can be spurious (negative, wildly large, or
+    sharply dipping spacings); no whale is ever ranged that near, and within the
+    critical range the measured pair is MP1-Direct anyway, so the MP2/MP3 curves
+    there carry no information. (B20's table is clean here; the guard is kept for
+    stations whose tables — like B19 — have near-field artifacts.)"""
+    ok = (bh_km >= 0.3) & (spacing > 0) & (spacing < 10)
+    return bh_km[ok], spacing[ok]
+
 fig = go.Figure()
-fig.add_trace(go.Scatter(x=bh_km, y=mp1_direct, mode="lines", name="MP1 − Direct",
-                         line=dict(color="seagreen", width=3)))
-fig.add_trace(go.Scatter(x=bh_km, y=mp2_mp1, mode="lines", name="MP2 − MP1",
-                         line=dict(color="darkorange", width=2)))
-fig.add_trace(go.Scatter(x=bh_km, y=mp3_mp2, mode="lines", name="MP3 − MP2",
-                         line=dict(color="mediumvioletred", width=2)))
+x, y = physical(mp1_direct)
+fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name="MP1 − Direct",
+                         line=dict(color=CB["orange"], width=3, dash="solid")))
+x, y = physical(mp2_mp1)
+fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name="MP2 − MP1",
+                         line=dict(color=CB["purple"], width=2, dash="dash")))
+x, y = physical(mp3_mp2)
+fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name="MP3 − MP2",
+                         line=dict(color=CB["blue"], width=2, dash="dot")))
 fig.update_layout(xaxis_title="Range (km)", yaxis_title="Arrival-time spacing (s)",
                   height=420, legend=dict(orientation="h", y=-0.2))
-show(fig, "BELLHOP consecutive-arrival spacing versus range for B19")
+show(fig, "BELLHOP consecutive-arrival spacing versus range for B20")
 ```
 
 ### Inverting a measured spacing {#sec-invert_demo}
 
-Inversion is a nearest-point lookup on the appropriate curve. Suppose a nearby
-call shows an MP1−Direct spacing of 5.0 s:
+The **spacing** is just the timing between successive multipath arrivals — the
+gap, in seconds, between the copies of one call that reach the OBS along
+different paths. Given the BELLHOP curves above, turning a spacing into a range
+is a nearest-point lookup on the appropriate curve. Suppose a nearby call shows
+an MP1−Direct spacing of 5.0 s:
 
 ```{python}
 #| label: invert-demo
@@ -268,10 +313,24 @@ idx = int(np.argmin(np.abs(mp1_direct.values - measured_spacing)))
 print(f"A {measured_spacing:.1f} s MP1-Direct spacing -> range {bh['interp_r'].iloc[idx] / 1000:.2f} km")
 ```
 
-This nearest-neighbour search is what the range-estimation code does for every
-call (@sec-matching), matching the measured spacing against the BELLHOP
-MP1−Direct, MP2−MP1 and MP3−MP2 curves and keeping the closest — after deciding,
-from the arrival amplitudes, which pair was measured.
+The lookup itself is trivial. What makes multipath ranging hard is everything
+that must happen *before* it — two problems in particular:
+
+1. **Detecting the multipaths accurately.** The multipaths are faint, closely
+spaced copies of the call buried in noise; their individual arrivals are never
+handed to us cleanly, so the spacing has to be recovered statistically rather
+than read off directly. This is the job of the autocorrelation method in
+@sec-autocorr.
+
+2. **Deciding between multipath hypotheses.** A single measured spacing could be
+the MP1−Direct, MP2−MP1, or MP3−MP2 gap (@fig-delay-curve), and each one implies
+a different range. Assigning the spacing to the wrong pair gives the wrong
+distance, so the pair must be identified before the spacing is inverted
+(@sec-matching).
+
+The rest of the chapter takes these two problems in turn — measuring the spacing
+(@sec-autocorr) and then choosing the pair (@sec-matching) — which together are
+the multipath ranging method.
 
 ## The straight-ray search-window helper {#sec-search_window}
 
@@ -286,10 +345,10 @@ latest sub-seafloor arrival sets the search window `dt_down = max(mp_interp − 
 
 ```{python}
 #| label: search-window
-#| code-summary: "Run the straight-ray helper for B19 and read off the search window"
-# Station B19 geometry (from data/Station_info_Marianas.csv)
-depth, water_ss, sed_ss = 5949.0, 1512.0, 1512.0
-thickness = 6099.0 - depth   # reflector depth - instrument depth (m)
+#| code-summary: "Run the straight-ray helper for B20 and read off the search window"
+# Station B20 geometry (from data/Station_info_Marianas.csv)
+depth, water_ss, sed_ss = 5563.0, 1512.0, 1512.0
+thickness = 5713.0 - depth   # reflector depth - instrument depth (m)
 
 distance, t0, t1, t2, t3, d_interp, mp_interp, mp_interp2 = ranging.basic_ranging(
     depth, water_ss, sed_ss, thickness, plotflag=False
@@ -359,13 +418,13 @@ print(f"true multipath delay = {true_delay:.2f} s; "
 from plotly.subplots import make_subplots
 
 fig = make_subplots(rows=2, cols=1, subplot_titles=("Detection score", "Autocorrelation"))
-fig.add_trace(go.Scatter(x=tt, y=score, mode="lines", line=dict(color="steelblue"),
+fig.add_trace(go.Scatter(x=tt, y=score, mode="lines", line=dict(color=CB["blue"]),
                          showlegend=False), row=1, col=1)
-fig.add_trace(go.Scatter(x=lags_pos, y=corr_pos, mode="lines", line=dict(color="indigo"),
+fig.add_trace(go.Scatter(x=lags_pos, y=corr_pos, mode="lines", line=dict(color=CB["purple"]),
                          showlegend=False), row=2, col=1)
-fig.add_vline(x=true_delay, line=dict(color="firebrick", dash="dash"), row=2, col=1)
+fig.add_vline(x=true_delay, line=dict(color=CB["vermillion"], dash="dash"), row=2, col=1)
 fig.add_annotation(x=true_delay, y=0.6, text=f"delay = {true_delay} s", showarrow=True,
-                   arrowhead=2, row=2, col=1, font=dict(color="firebrick"))
+                   arrowhead=2, row=2, col=1, font=dict(color=CB["vermillion"]))
 fig.update_xaxes(title_text="Time (s)", row=1, col=1)
 fig.update_xaxes(title_text="Lag (s)", range=[0, 8], row=2, col=1)
 fig.update_layout(height=520)
@@ -389,16 +448,45 @@ print("EventAnalyzer picked", len(analyzer.df), "calls in the synthetic minute")
 
 ## From spacing to range {#sec-matching}
 
-`whaletracks/cli/plot_ranges.py` closes the loop. For each 20-minute window it
-takes the measured spacing and, for the BELLHOP MP1−Direct, MP2−MP1 and MP3−MP2
-curves, finds the range whose modelled spacing is closest (the nearest-point
-inversion from @sec-invert_demo). The essential lines are:
+`whaletracks/detection/range_estimation.py` closes the loop. For every
+autocorrelation window it takes the strongest-amplitude arrival spacing and, for
+the BELLHOP MP1−Direct, MP2−MP1 and MP3−MP2 curves, finds the range whose
+modelled spacing is closest — the nearest-point inversion of @sec-invert_demo
+applied to every window. The `whaletracks-plot-ranges` command
+(`cli/plot_ranges.py`) wraps this with file loading and plotting; here we call
+the function directly on the measured B20 timings to turn them into ranges:
 
-```python
-near_timings = [abs(mp - mp_timing) for mp in mp_1_timing]   # |model - measured|
-match_ind    = near_timings.index(min(near_timings))         # closest range
-best_distance = distance[match_ind]                          # metres
+```{python}
+#| label: range-estimation
+#| code-summary: "Range every B20 autocorrelation window from its multipath timings"
+from whaletracks.detection.range_estimation import (
+    bellhop_timings,
+    estimate_ranges_from_timings,
+)
+
+# Modelled spacing curves for B20, from the BELLHOP table loaded earlier.
+bh_dist, mp1_t, mp2_t, mp3_t = bellhop_timings(bh)
+
+# Measured inputs: the per-window autocorrelation timings, and the call
+# detections used to require a call in each window's centre minute.
+auto = pd.read_csv(data("data", "fin_whale", "auto_B20_mp_CORTADO_TEST.csv"))
+calls = pd.read_csv(data("data", "fin_whale", "B20_mp_CORTADO_TEST.csv"))
+calls["peak_time"] = pd.to_datetime(calls["peak_time"])
+
+# February 2013 onward is excluded: airgun shots from a seismic survey corrupt
+# the multipath timings in that period (cf. the February 2012 exclusion in
+# Hilmo et al. 2025).
+ranges_b20 = estimate_ranges_from_timings(
+    auto, calls["peak_time"].unique(), bh_dist, mp1_t, mp2_t, mp3_t,
+    valid_end="2013-02-01",
+)
+print(f"ranged {len(ranges_b20)} windows (Feb 2013+ excluded: airgun survey)")
+ranges_b20.head(3)
 ```
+
+Each window is ranged under all three hypotheses at once — `range_D_MP1`,
+`range_MP1_MP2`, `range_MP2_MP3` — from the spacing of the arrival with the
+largest autocorrelation amplitude.
 
 The subtlety — and the main source of ranging error — is deciding **which pair
 of arrivals** the spacing represents. Close to the OBS the direct path is strong
@@ -413,31 +501,71 @@ qualifying minute.
 
 ## Results: a season of ranges {#sec-results}
 
-The committed output `data/fin_whale/Marianas_auto_B19_v2.csv` is the result
-of the steps above for station B19 — the Marianas OBS featured in both papers —
-over its ~11-month deployment (fin whales, Feb 2012–Feb 2013). Following
-@hilmo2025, a range is attempted for a given minute **only when at least 2 calls
-fall in that minute and at least 10 calls fall in the surrounding 20-minute
-window** (`ranging.min_center` / `min_window` in `config/detect_fin.yaml`).
-@fig-ranges shows the range estimate through time.
+The `ranges_b20` table just computed (@sec-matching) is the ranging result for
+station B20 — one of the seven Marianas OBS in both papers — and is what
+`whaletracks-plot-ranges` writes to
+`data/fin_whale/Marianas_auto_B20_CORTADO_TEST_v2.csv`. A range is estimated for
+each autocorrelation window that has at least one detected call in its centre
+minute; the detection thresholds that build those windows are set in
+`config/detect_fin.yaml` (@sec-autocorr). @fig-ranges shows the range estimate
+through time.
 
 ```{python}
 #| label: fig-ranges
-#| fig-cap: "Estimated range (from the MP1−Direct model) to calling fin whales at station B19 across the deployment, coloured by the dB amplitude of the strongest arrival."
+#| fig-cap: "Estimated range to calling fin whales at station B20. Top: MP1−Direct range across the full deployment, coloured by the dB amplitude of the strongest arrival. Middle and bottom: full-width zooms on the central tracks of the busiest early-year (12–13 Apr 2012) and late-year (16–17 Jan 2013) periods, where individual whales approaching and receding are visible. In the zooms the coloured markers are the MP1−Direct range; grey markers show the alternative hypotheses the same spacing would give — MP2−MP1 (open circles) and MP3−MP2 (×) — which sit at longer range."
 #| code-fold: true
-ranges = pd.read_csv(data("data", "fin_whale", "Marianas_auto_B19_v2.csv"))
-ranges["time"] = pd.to_datetime(ranges["time"])
-keep = ranges[ranges["auto_max"] > 3]
+from plotly.subplots import make_subplots
 
-fig = go.Figure()
+keep = ranges_b20[ranges_b20["auto_max"] > 3]
+cmin, cmax = keep["auto_amp"].min(), keep["auto_amp"].max()
+
+def in_window(df, start, end):
+    lo, hi = pd.Timestamp(start, tz="UTC"), pd.Timestamp(end, tz="UTC")
+    return df[(df["time"] >= lo) & (df["time"] < hi)]
+
+early = in_window(keep, "2012-04-12 00:00", "2012-04-13 04:00")  # central track, early peak
+late = in_window(keep, "2013-01-16 14:00", "2013-01-17 20:00")   # central track, late peak
+
+fig = make_subplots(
+    rows=3, cols=1, row_heights=[0.4, 0.3, 0.3], vertical_spacing=0.09,
+    subplot_titles=("Full deployment",
+                    "Central track: 12–13 Apr 2012", "Central track: 16–17 Jan 2013"),
+)
+
+# Full-deployment panel: MP1-Direct only, coloured by dB (carries the colorbar).
 fig.add_trace(go.Scatter(
-    x=keep["time"], y=keep["range_D_MP1"], mode="markers",
-    marker=dict(size=4, color=keep["auto_amp"], colorscale="Viridis",
-                colorbar=dict(title="dB")),
-))
-fig.update_layout(xaxis_title="Date", yaxis_title="Range (km, MP1−Direct model)",
-                  height=430, yaxis_range=[0, 40])
-show(fig, "Estimated range to fin whales at B19 across the deployment")
+    x=keep["time"], y=keep["range_D_MP1"], mode="markers", showlegend=False,
+    marker=dict(size=4, color=keep["auto_amp"], colorscale="Viridis", cmin=cmin,
+                cmax=cmax, colorbar=dict(title="dB"))), row=1, col=1)
+
+def add_zoom(df, row, legend):
+    # Alternative hypotheses in grey, drawn behind the primary series.
+    fig.add_trace(go.Scatter(
+        x=df["time"], y=df["range_MP1_MP2"], mode="markers", name="MP2 − MP1",
+        legendgroup="mp2", showlegend=legend,
+        marker=dict(size=5, color="#a0a0a0", symbol="circle-open")), row=row, col=1)
+    fig.add_trace(go.Scatter(
+        x=df["time"], y=df["range_MP2_MP3"], mode="markers", name="MP3 − MP2",
+        legendgroup="mp3", showlegend=legend,
+        marker=dict(size=6, color="#555555", symbol="x")), row=row, col=1)
+    # Primary MP1-Direct on top, same dB colour scale.
+    fig.add_trace(go.Scatter(
+        x=df["time"], y=df["range_D_MP1"], mode="markers", showlegend=False,
+        marker=dict(size=5, color=df["auto_amp"], colorscale="Viridis",
+                    cmin=cmin, cmax=cmax, showscale=False)), row=row, col=1)
+
+add_zoom(early, 2, True)
+add_zoom(late, 3, False)
+
+fig.update_yaxes(range=[0, 40], title_text="Range (km)", row=1, col=1)
+fig.update_yaxes(range=[0, 40], title_text="Range (km)", row=2, col=1)
+fig.update_yaxes(range=[0, 40], title_text="Range (km)", row=3, col=1)
+fig.update_xaxes(range=["2012-04-12 00:00", "2012-04-13 04:00"], row=2, col=1)
+fig.update_xaxes(range=["2013-01-16 14:00", "2013-01-17 20:00"], row=3, col=1)
+fig.update_layout(height=950, margin=dict(b=70),
+                  legend=dict(orientation="h", yanchor="top", y=-0.05,
+                              x=0.5, xanchor="center"))
+show(fig, "B20 ranges: full deployment with two full-width central-track zooms")
 ```
 
 The seasonal structure — clustering of nearby detections during some intervals
@@ -507,7 +635,8 @@ the method can be trusted:
 | Spectrogram, kernel, detection score | `whaletracks/detection/detect_calls.py` |
 | Call & multipath picking | `whaletracks/detection/event_analyzer.py` |
 | End-to-end detection + autocorrelation | `whaletracks-detect` (`cli/run_detection.py`) |
-| Delay → range + plots | `whaletracks-plot-ranges` (`cli/plot_ranges.py`) |
+| Timing → range matching | `whaletracks/detection/range_estimation.py` |
+| Range CLI (loads data, writes CSV, plots) | `whaletracks-plot-ranges` (`cli/plot_ranges.py`) |
 
 Run parameters for each command live in `whaletracks/config/*.yaml`; see the
 package `README.md` for setup and usage.
@@ -516,10 +645,10 @@ package `README.md` for setup and usage.
 
 1\. Load the B01 BELLHOP table
 (`data/bellhop_arrival_models/Marianas_ray_B01_bellhop_arrivals.csv`) and compare
-its MP1−Direct spacing curve with B19's from @sec-forward_model. How does the
-shallower station (5321 m vs 5949 m) shift the curve?
+its MP1−Direct spacing curve with B20's from @sec-forward_model. How does the
+shallower station (5321 m vs 5563 m) shift the curve?
 
-2\. In @sec-invert_demo, what range does a 3.0 s MP1−Direct spacing imply for B19
+2\. In @sec-invert_demo, what range does a 3.0 s MP1−Direct spacing imply for B20
 under the BELLHOP table versus the straight-ray helper of @sec-search_window? Why
 do they differ, and why does only the BELLHOP answer count?
 

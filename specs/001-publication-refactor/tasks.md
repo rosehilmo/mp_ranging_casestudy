@@ -42,7 +42,11 @@ description: "Task list for the publication-readiness refactor"
 - [x] T016 Reframe BELLHOP as the ranging model (provenance only) and `basic_ranging` as the search-window helper
 - [x] T017 Add "Assumptions and limitations"; drop the deprecated summed-spectrogram alternative
 - [x] T018 [QC] `quarto render` runs all 11 cells; citations resolve (only book-only `@sec-distance_sampling` warns)
-- [ ] T019 **Further PI-directed tutorial revisions** (scope TBD — see Open below); re-render and get PI sign-off
+- [x] T018b Factor the timing→range step into `whaletracks/detection/range_estimation.py` (shared by the `plot_ranges` CLI and the tutorial); add a worked ranging section — `@sec-matching` runs it live and `@sec-results` plots the computed table
+- [x] T018e Switch the tutorial worked example to **B20 (CORTADO_TEST dataset)**; add tz-safe `valid_start`/`valid_end` date bounds to the ranging (config + function) and exclude Feb 2013 onward (airgun survey) → 7140 ranges (Mar 2012–Jan 2013); lock with `tests/test_plot_ranges_fin.py` (B20 CORTADO_TEST)
+- [x] T018c Colour-accessibility pass: add Okabe–Ito standard to constitution Figure Standards; recolour all tutorial figures; filter BELLHOP near-field artifacts from the delay curve (`KNOWN_ISSUES` #10)
+- [x] T018d Fix calling-depth citation (Watkins et al. 1987 + Stimpert et al. 2015, not Hilmo & Wilcock 2024); redraw ray-path figure (whale below surface, OBS above sub-seafloor reflector); revise §1.3.1 to be forward-leading
+- [ ] T019 **Further PI-directed tutorial revisions** (ongoing — PI reviewing section by section); re-render and get PI sign-off
 
 ## Phase 4: Spec Kit governance + hygiene (DONE this session)
 
@@ -53,7 +57,7 @@ description: "Task list for the publication-readiness refactor"
 
 ## Phase 5: Remaining Python debt (PENDING)
 
-- [ ] T024 [QC] Ship fin autocorrelation intermediates so fin `plot_ranges` is reproducible offline (currently only Bryde's B01)
+- [x] T024 [QC] Ship fin autocorrelation intermediates so fin ranging is reproducible offline — **B19 done**: `Marianas_auto_B19_mp_v2.csv` shipped; `range_estimation.py` reproduces `Marianas_auto_B19_v2.csv` from it (regenerated from the shipped timings — the stale 38k-row output that included the Feb 2012 airgun period was replaced with the 6474-row Mar–Oct 2012 result per Hilmo et al. 2025); locked by `tests/test_plot_ranges_fin.py`. Other fin stations still need their autocorr intermediates.
 - [ ] T025 Add a per-output provenance manifest (station/channel/time + config id) — Principle III
 - [ ] T026 Review + merge branch `modernize-python-segment`; push
 - [ ] T027 **PI action**: rotate the FDSN password exposed in upstream history
