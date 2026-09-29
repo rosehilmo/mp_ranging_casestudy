@@ -139,8 +139,9 @@ threshold variations) is documented as a deliberate, reviewed deviation.
 - Key packages: **obspy** (FDSN + signal processing), numpy, scipy, pandas,
   matplotlib (publication), plotly (exploratory/tutorial), pyyaml, quarto +
   jupyter (tutorial render); dev: pytest, ruff.
-- Console entry points (5): `whaletracks-detect`, `whaletracks-plot-ranges`,
-  `whaletracks-histogram`, `whaletracks-verify`, `whaletracks-pick`. Run from
+- Console entry points (6): `whaletracks-detect`, `whaletracks-plot-ranges`,
+  `whaletracks-histogram`, `whaletracks-verify`, `whaletracks-pick`,
+  `whaletracks-select` (hypothesis selection, feature 002). Run from
   `PythonCodes/` so config-relative data paths resolve.
 - Compute: JupyterHub container on this host (CPU-capped ~32 cores; parallel jobs
   **≤ 24 workers** per lab policy). GUI/network CLIs require a display + IRIS

@@ -8,7 +8,7 @@ config/detect_brydes.yaml and config/detect_fin.yaml).
 
 Example:
     whaletracks-detect --config whaletracks/config/detect_fin.yaml
-    whaletracks-detect --config whaletracks/config/detect_brydes.yaml --station B19
+    whaletracks-detect --config whaletracks/config/detect_brydes.yaml --station B20
 """
 
 import argparse

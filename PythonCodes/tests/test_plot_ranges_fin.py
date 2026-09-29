@@ -33,12 +33,10 @@ RANGE_COLS = [
 def test_b20_cortado_ranges_match_committed(tmp_path):
     cfg = _common.load_yaml(CONFIG)
     # Resolve data directories to absolute paths so the test is CWD-independent.
+    # The config's defaults are the B20 CORTADO_TEST inputs and the Feb-2013
+    # airgun exclusion; the test uses them as-is.
     for key in ("bellhop_dir", "calls_dir"):
         cfg[key] = os.path.join(PKG_ROOT, cfg[key])
-    # CORTADO_TEST inputs + the airgun-survey exclusion (Feb 2013 onward).
-    cfg["calls_template"] = "{station}_mp_CORTADO_TEST.csv"
-    cfg["auto_template"] = "auto_{station}_mp_CORTADO_TEST.csv"
-    cfg["valid_end"] = "2013-02-01"
     cfg["output_dir"] = str(tmp_path)
 
     result = estimate_ranges(cfg, "B20", save=None, show=False)

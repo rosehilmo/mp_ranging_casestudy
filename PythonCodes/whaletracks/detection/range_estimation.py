@@ -5,7 +5,7 @@ Side-effect-free core of the multipath ranging step, shared by the
 autocorrelation window it picks the strongest-amplitude multipath timing and
 matches it against the modelled timing-vs-range curves (MP1-Direct, MP2-MP1,
 MP3-MP2), returning one range estimate per qualifying window. This is the step
-that turns the measured call timings (e.g. from station B19) into range CSVs.
+that turns the measured call timings (e.g. from station B20) into range CSVs.
 
 The logic mirrors the published fin method (Hilmo & Wilcock 2024; Hilmo et al.
 2025) and reproduces the legacy ``plot_ranges_calltimings_autocorr`` output.

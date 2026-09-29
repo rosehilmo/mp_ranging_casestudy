@@ -9,7 +9,7 @@ channel: HHZ            # channel to fetch
 
 # List of stations to verify
 station_list:
-  - B19
+  - B20
 
 # Start of the verification window; the window length is chunk_length_s.
 starttime: "2012-3-11T7:00:00.000"

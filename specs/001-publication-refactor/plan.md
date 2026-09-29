@@ -55,8 +55,10 @@ with `conda env create -f environment.yml`.
 **Issues to resolve**:
 - Per-output provenance manifest (Principle III) not yet materialized — ranges
   are traceable via config + file names but no explicit manifest.
-- Fin autocorrelation intermediates: **B19 and B20 (CORTADO_TEST) shipped and
-  test-locked**; remaining fin stations still need theirs (or document the gap).
+- Fin autocorrelation intermediates: **B20 (CORTADO_TEST) shipped and
+  test-locked** — the worked/tested fin station everywhere (PI, 2026-09-29);
+  B19's remain shipped as legacy only. Remaining fin stations still need theirs
+  (or document the gap).
 - FDSN password rotation is a **PI action** outside the repo.
 - MATLAB/R portability bounded by native runtimes (Principle VI caveat).
 
@@ -133,8 +135,8 @@ the Python segment.
 ## Open Questions
 
 - [x] Ship fin autocorrelation intermediates (make fin `plot_ranges`
-      offline-reproducible) — done for B19 + B20 (CORTADO_TEST, test-locked);
-      remaining fin stations still open.
+      offline-reproducible) — done for B20 (CORTADO_TEST, test-locked; the
+      worked station everywhere per PI); remaining fin stations still open.
 - [ ] MATLAB → Python conversion (PI decision): what does `MATLABCodes/` compute,
       how much overlaps the existing `whaletracks` pipeline, and what MATLAB
       reference outputs anchor the port's golden check?

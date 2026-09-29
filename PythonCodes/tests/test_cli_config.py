@@ -65,9 +65,9 @@ def test_shared_station_table():
 def test_station_filter():
     cfg = _common.load_yaml(BRYDES)
     table = pd.read_csv(os.path.join(PKG_ROOT, cfg["station_table"]))
-    rows = list(_station_rows(table, [0, len(table)], "B19"))
+    rows = list(_station_rows(table, [0, len(table)], "B20"))
     assert len(rows) == 1
-    assert rows[0][1]["Sites"] == "B19"
+    assert rows[0][1]["Sites"] == "B20"
 
     all_rows = list(_station_rows(table, cfg["site_range"], None))
     assert len(all_rows) == cfg["site_range"][1] - cfg["site_range"][0]

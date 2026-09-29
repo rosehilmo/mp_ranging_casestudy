@@ -1,0 +1,36 @@
+# Multipath hypothesis selection config — FIN whales, Marianas.
+# Port of MATLABCodes/clean_group_ranges.m (Hilmo et al. 2025 semi-automated
+# selection). Used by: whaletracks-select --config select_fin.yaml --station B20
+#
+# Paths resolved relative to the current working directory (run from PythonCodes).
+
+input_dir: data/fin_whale
+input_template: "Marianas_auto_{station}_CORTADO_TEST_v2.csv"
+
+output_dir: data/fin_whale
+output_template: "{station}_grouped_ranges_CORTADO_TEST.csv"
+
+# Step-1 filter (clean_group_ranges.m lines 5-29)
+filter:
+  start: "2012-03-01"     # keep rows strictly after this time
+  max_range_km: 25        # only D-MP1 ranges closer than 25 km
+  min_window_calls: 1     # auto_count (MATLAB sum_calls) >= 1
+  saturation_km: 40       # ranges at the BELLHOP table edge -> NaN
+
+# Step-2 grouping walk — published values (Hilmo et al. 2025: ranges within
+# 1.5 km and 1 h are grouped). The MATLAB source drifted to 1.6 km; corrected
+# to the paper per author direction 2026-09-29 (KNOWN_ISSUES #7).
+grouping:
+  range_jump_km: 1.5      # new group when consecutive D-MP1 ranges jump more
+  time_gap_hours: 1       # ... or are more than 1 h apart
+
+# Step-3 group qualification (fin: "at least 12 ranges, mean window calls > 10")
+qualify:
+  min_group_rows: 12
+  min_mean_calls: 10
+
+# Steps 4-5 supertracks + hypothesis assignment — published track-linking gap
+# is < 3 h (Hilmo et al. 2025); the MATLAB source drifted to 2 h (KNOWN_ISSUES #7).
+supertrack:
+  gap_hours: 3            # split tracks separated by more than 3 h
+  max_segment_groups: 18  # midpoint-split longer segments (3^n guard)

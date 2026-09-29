@@ -1,5 +1,5 @@
 # Range estimation + plotting config — FIN whales, Marianas.
-# Used by: whaletracks-plot-ranges --config ranges_fin.yaml --station B01
+# Used by: whaletracks-plot-ranges --config ranges_fin.yaml --station B20
 #
 # Paths resolved relative to the current working directory (run from PythonCodes).
 
@@ -19,13 +19,17 @@ reflectivity: false
 
 # Fin detection / autocorrelation inputs.
 # calls  = per-call detections (peak_time); auto = per-window autocorrelation
-# timings (arrival_1..5). B19 is the worked station shipped with the repo.
+# timings (arrival_1..5). B20 (CORTADO_TEST dataset) is the worked station.
 calls_dir: data/fin_whale
-calls_template: "{station}_mp.csv"
-auto_template: "Marianas_auto_{station}_mp_v2.csv"
+calls_template: "{station}_mp_CORTADO_TEST.csv"
+auto_template: "auto_{station}_mp_CORTADO_TEST.csv"
 
 output_dir: data/fin_whale
-output_template: "Marianas_auto_{station}_v2.csv"
+output_template: "Marianas_auto_{station}_CORTADO_TEST_v2.csv"
+
+# Airgun survey from February 2013 onward corrupts the multipath timings
+# (Hilmo et al. 2025); windows from then on are excluded.
+valid_end: "2013-02-01"
 
 # Published fin ranging gate (Hilmo et al. 2025): a window is ranged only when
 # its centre minute has >= 2 detected calls AND the surrounding 20-min window

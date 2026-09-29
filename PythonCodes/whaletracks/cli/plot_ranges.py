@@ -8,7 +8,7 @@ model) to estimate range. Results are written to a CSV and plotted.
 
 Example:
     whaletracks-plot-ranges --config whaletracks/config/ranges_fin.yaml \
-        --station B01 --save ranges_B01.png
+        --station B20 --save ranges_B20.png
 """
 
 import argparse

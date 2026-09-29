@@ -523,7 +523,7 @@ are visible in it.
 
 ```{python}
 #| label: fig-ranges
-#| fig-cap: "Raw ranging output at station B20. Top: MP1−Direct range across the full deployment, coloured by the dB amplitude of the strongest arrival; the scattered points in the summer months are spurious ranges forced by noise (earthquake swarms, T-phases, ship noise) triggering the detector (see text). Middle and bottom: full-width zooms on the central tracks of the busiest early-year (12–13 Apr 2012) and late-year (16–17 Jan 2013) periods, where individual whales approaching and receding are visible. In the zooms the coloured markers are the MP1−Direct range; grey markers show the alternative hypotheses the same spacing would give — MP2−MP1 (open circles) and MP3−MP2 (×) — which sit at longer range. Deciding which hypothesis is real is a downstream, semi-automated step (see text)."
+#| fig-cap: "Raw ranging output at station B20. Top: MP1−Direct range across the full deployment, coloured by the dB amplitude of the strongest arrival; the scattered points in the summer months are spurious ranges forced by noise (earthquake swarms, T-phases, ship noise) triggering the detector (see text). Middle and bottom: full-width zooms on two tracks — a close approach in which the whale passes nearly over the station (24 Mar 2012) and the busiest late-year period (16–17 Jan 2013) — where an individual whale approaching and receding is visible. In the zooms the coloured markers are the MP1−Direct range; grey markers show the alternative hypotheses the same spacing would give — MP2−MP1 (open circles) and MP3−MP2 (×) — which sit at longer range. Deciding which hypothesis is real is a downstream, semi-automated step (see text)."
 #| code-fold: true
 from plotly.subplots import make_subplots
 
@@ -534,13 +534,13 @@ def in_window(df, start, end):
     lo, hi = pd.Timestamp(start, tz="UTC"), pd.Timestamp(end, tz="UTC")
     return df[(df["time"] >= lo) & (df["time"] < hi)]
 
-early = in_window(keep, "2012-04-12 00:00", "2012-04-13 04:00")  # central track, early peak
-late = in_window(keep, "2013-01-16 14:00", "2013-01-17 20:00")   # central track, late peak
+early = in_window(keep, "2012-03-24 03:00", "2012-03-24 15:00")  # close approach
+late = in_window(keep, "2013-01-16 18:00", "2013-01-17 11:00")   # central track, late peak
 
 fig = make_subplots(
     rows=3, cols=1, row_heights=[0.4, 0.3, 0.3], vertical_spacing=0.09,
     subplot_titles=("Full deployment",
-                    "Central track: 12–13 Apr 2012", "Central track: 16–17 Jan 2013"),
+                    "Close approach: 24 Mar 2012", "Central track: 16–17 Jan 2013"),
 )
 
 # Full-deployment panel: MP1-Direct only, coloured by dB (carries the colorbar).
@@ -571,8 +571,8 @@ add_zoom(late, 3, False)
 fig.update_yaxes(range=[0, 40], title_text="Range (km)", row=1, col=1)
 fig.update_yaxes(range=[0, 40], title_text="Range (km)", row=2, col=1)
 fig.update_yaxes(range=[0, 40], title_text="Range (km)", row=3, col=1)
-fig.update_xaxes(range=["2012-04-12 00:00", "2012-04-13 04:00"], row=2, col=1)
-fig.update_xaxes(range=["2013-01-16 14:00", "2013-01-17 20:00"], row=3, col=1)
+fig.update_xaxes(range=["2012-03-24 03:00", "2012-03-24 15:00"], row=2, col=1)
+fig.update_xaxes(range=["2013-01-16 18:00", "2013-01-17 11:00"], row=3, col=1)
 fig.update_layout(height=950, margin=dict(b=70),
                   legend=dict(orientation="h", yanchor="top", y=-0.05,
                               x=0.5, xanchor="center"))
@@ -601,8 +601,220 @@ none of these out-of-season ranges met the automated track criteria, and all
 were rejected on manual inspection of their spectrograms [@hilmo2025]. The
 hypothesis-selection step therefore doubles as the filter that removes spurious
 ranges — the raw table in @fig-ranges is an *input* to that step, not a finished
-map of whale positions. Both steps, and the density estimation they feed, are
-taken up later (@sec-distance_sampling).
+map of whale positions. That step is next (@sec-hypothesis_selection); the
+density estimation it feeds comes later (@sec-distance_sampling).
+
+## Selecting hypotheses: from raw ranges to whale tracks {#sec-hypothesis_selection}
+
+The semi-automated selection of @hilmo2025 is implemented in
+`whaletracks/detection/hypothesis_selection.py` (command: `whaletracks-select`),
+a Python port of the original MATLAB (`MATLABCodes/clean_group_ranges.m`). The
+automated part works in four moves — every threshold below lives in
+`config/select_fin.yaml`:
+
+1. **Filter.** Keep windows whose MP1−Direct candidate is under 25 km (and
+   discard ranges pinned at the BELLHOP table's 40-km edge, which mark failed
+   matches, not whales).
+2. **Group.** Walking in time order, a new group starts whenever consecutive
+   MP1−Direct ranges jump by more than 1.5 km or are more than an hour apart
+   [@hilmo2025]; otherwise the row joins the current group.
+3. **Qualify.** A group is kept (`use_track`) only if it has at least 12 ranges
+   averaging more than 10 calls per window — the track criteria that a singing,
+   slowly moving whale satisfies easily and that scattered noise detections
+   (earthquake swarms, T-phases, ships) rarely do.
+4. **Assign.** Kept groups within three hours of one another are linked into
+   *supertracks*; for a supertrack of $n$ groups, all $3^n$ combinations of
+   per-group hypotheses are scored by how badly consecutive groups' end and
+   start ranges disagree, and the combination with the smallest total mismatch
+   wins. A whale's track then changes smoothly even where the measured spacing
+   hops from one arrival pair to another.
+
+```{python}
+#| label: hypothesis-selection
+#| code-summary: "Select multipath hypotheses for the B20 ranges (loads the shipped result; computing afresh takes ~2 min)"
+from whaletracks.detection.hypothesis_selection import (
+    select_hypotheses,
+    selected_range,
+)
+
+grouped_path = data("data", "fin_whale", "B20_grouped_ranges_CORTADO_TEST.csv")
+if os.path.exists(grouped_path):
+    grouped_b20 = pd.read_csv(grouped_path, parse_dates=["time"])
+else:
+    # One B20 supertrack has 17 groups -> 3^17 combinations (exact, ~2 min).
+    grouped_b20 = select_hypotheses(ranges_b20)  # fin thresholds by default
+    grouped_b20.to_csv(grouped_path, index=False)
+
+tracks = grouped_b20[grouped_b20["use_track"]]
+counts = tracks["best_hypothesis"].value_counts(dropna=False)
+print(f"{len(grouped_b20)} windows -> {len(tracks)} rows in "
+      f"{tracks['groupnum'].nunique()} qualifying groups, "
+      f"{tracks['supertrack'].nunique()} supertracks")
+print("selected hypotheses (1=MP1−D, 2=MP2−MP1, 3=MP3−MP2, NaN=unassigned):")
+print(counts.to_string())
+```
+
+Most groups resolve to MP1−Direct, a smaller share to MP2−MP1, and a few
+distant ones to MP3−MP2 — the range-dependent pattern of @sec-results.
+@fig-selection shows the effect in the same windows as @fig-ranges: the
+three-hypothesis cloud collapses onto single whale tracks, the spurious summer
+ranges disappear because noise never sustains a qualifying group, and in the
+January zoom the automated selection switches between hypotheses as the
+whale's range changes — though, as we will see below, not always correctly.
+
+```{python}
+#| label: fig-selection
+#| fig-cap: "Hypothesis selection at B20, shown in the same windows as @fig-ranges. Grey: the raw three-hypothesis cloud (all windows, all hypotheses). Colour: rows in qualifying groups, plotted only at the range of their selected hypothesis — MP1−Direct (orange circles), MP2−MP1 (purple diamonds), MP3−MP2 (blue ×); rows in single-group supertracks remain unassigned pending analyst review and are not coloured. Top: across the full deployment the noise-driven ranges (including the summer cloud) fail the track criteria and drop out. Middle: the 24 Mar close approach resolves to a clean MP1−Direct V; the few MP2−MP1 assignments right at closest approach are exactly the kind of group the analyst review pass (see text) inspects. Bottom: in the January window the automated selection switches between MP1−Direct and MP2−MP1 — partly genuine range dependence, partly first-pass mistakes; @fig-corrected shows the analyst-corrected assignment of this track."
+#| code-fold: true
+sel_range = selected_range(tracks)
+
+fig = make_subplots(
+    rows=3, cols=1, row_heights=[0.4, 0.3, 0.3], vertical_spacing=0.09,
+    subplot_titles=("Full deployment",
+                    "Close approach: 24 Mar 2012", "Central track: 16–17 Jan 2013"),
+)
+
+RAW_SERIES = (("range_D_MP1", "#c8c8c8"), ("range_MP1_MP2", "#d8d8d8"),
+              ("range_MP2_MP3", "#e4e4e4"))
+SELECTED_SERIES = ((1, "MP1−Direct", CB["orange"], "circle"),
+                   (2, "MP2−MP1", CB["purple"], "diamond"),
+                   (3, "MP3−MP2", CB["blue"], "x"))
+
+def add_selection_panel(raw_df, tr_df, tr_sel, row, legend, size):
+    for col, shade in RAW_SERIES:
+        fig.add_trace(go.Scatter(
+            x=raw_df["time"], y=raw_df[col], mode="markers",
+            marker=dict(size=size - 1, color=shade),
+            name=f"raw {col[6:].replace('_', '−')}",
+            legendgroup=f"raw-{col}", showlegend=legend), row=row, col=1)
+    for code, name, colour, symbol in SELECTED_SERIES:
+        m = (tr_df["best_hypothesis"] == code).to_numpy()
+        fig.add_trace(go.Scatter(
+            x=tr_df["time"][m], y=tr_sel[m], mode="markers",
+            marker=dict(size=size, color=colour, symbol=symbol),
+            name=f"selected: {name}",
+            legendgroup=f"sel-{code}", showlegend=legend), row=row, col=1)
+
+add_selection_panel(grouped_b20, tracks, sel_range, row=1, legend=True, size=4)
+for row, (start, end) in ((2, ("2012-03-24 03:00", "2012-03-24 15:00")),
+                          (3, ("2013-01-16 18:00", "2013-01-17 11:00"))):
+    raw_w = in_window(grouped_b20, start, end)
+    tr_w = in_window(tracks, start, end)
+    add_selection_panel(raw_w, tr_w, sel_range[tr_w.index], row=row,
+                        legend=False, size=6)
+    fig.update_xaxes(range=[start, end], row=row, col=1)
+
+for row in (1, 2, 3):
+    fig.update_yaxes(range=[0, 40], title_text="Range (km)", row=row, col=1)
+fig.update_layout(height=950, margin=dict(b=70),
+                  legend=dict(orientation="h", yanchor="top", y=-0.05,
+                              x=0.5, xanchor="center"))
+show(fig, "Raw three-hypothesis cloud vs selected whale-track ranges at B20, "
+          "full deployment plus the two central-track zooms")
+```
+
+What keeps this step *semi*-automated [@hilmo2025] is **analyst verification**:
+the automated assignment is reviewed against the song spectrograms.
+`whaletracks-select --review` replays the MATLAB verification loop (accept `0`,
+override `1`/`2`/`3`, reject `9`), writing a `*_corrected.csv`. Groups the
+automation could not assign — including single-group supertracks, left NaN
+above — need this human pass, and so, as @fig-corrected shows, do some of the
+groups it *does* assign.
+
+**The first pass makes mistakes.** The automated assignment is exactly that —
+a first pass. Where candidate tracks overlap, or a group's start and end
+ranges are ambiguous, the minimum-mismatch choice can land on the wrong
+hypothesis; this is obvious in the January track of @fig-selection. Those
+mistakes must be corrected by analyst input. @fig-corrected compares the
+automated and analyst-corrected selections from the original MATLAB run of
+this workflow (shipped as `data/fin_whale/B20_grouped_ranges.csv` and
+`B20_grouped_ranges_corrected.csv`):
+
+```{python}
+#| label: corrected-ranges
+#| code-summary: "Load the MATLAB workflow's automated and analyst-corrected selections for B20"
+def load_grouped(name):
+    df = pd.read_csv(data("data", "fin_whale", name))
+    df["time"] = pd.to_datetime(
+        df["time"], format="%d-%b-%Y %H:%M:%S").dt.tz_localize("UTC")
+    df["use_track"] = df["use_track"] == 1
+    return df
+
+matlab_auto = load_grouped("B20_grouped_ranges.csv")
+matlab_corr = load_grouped("B20_grouped_ranges_corrected.csv")
+first_pass = matlab_auto[matlab_auto["use_track"]]
+reviewed = matlab_corr[matlab_corr["use_track"]]
+print(f"automated first pass: {len(first_pass)} rows in tracks; "
+      f"after analyst review: {len(reviewed)}")
+print("hypotheses before:", first_pass["best_hypothesis"]
+      .value_counts(dropna=False).to_dict())
+print("hypotheses after: ", reviewed["best_hypothesis"]
+      .value_counts(dropna=False).to_dict())
+```
+
+```{python}
+#| label: fig-corrected
+#| fig-cap: "Analyst correction of the automated selection at B20, from the original MATLAB run of this workflow (full deployment; Hilmo et al. 2025). Grey open circles: the automated first pass, plotted at the range of its selected hypothesis. Colour: the analyst-corrected assignment — MP1−Direct (orange circles), MP2−MP1 (purple diamonds), MP3−MP2 (blue ×). Top: in the March close approach the review confirms the automated V (the coloured points sit inside the grey circles). Bottom: in the January window the automation's mistakes are plain — the analyst reassigned much of the track between MP1−Direct and MP2−MP1, moving those ranges onto the other hypothesis curve, removed the spurious MP3−MP2 assignments, and rejected some groups outright (grey circles with no coloured partner)."
+#| code-fold: true
+auto_sel = selected_range(first_pass)
+corr_sel = selected_range(reviewed)
+
+fig = make_subplots(rows=2, cols=1, vertical_spacing=0.13,
+                    subplot_titles=("Close approach: 24 Mar 2012",
+                                    "Central track: 16–17 Jan 2013"))
+shown = set()  # one legend entry per series, from whichever panel has points
+for row, (start, end) in ((1, ("2012-03-24 03:00", "2012-03-24 15:00")),
+                          (2, ("2013-01-16 18:00", "2013-01-17 11:00"))):
+    aw = in_window(first_pass, start, end)
+    fig.add_trace(go.Scatter(
+        x=aw["time"], y=auto_sel[aw.index], mode="markers",
+        marker=dict(size=7, color="#a0a0a0", symbol="circle-open"),
+        name="automated first pass", legendgroup="auto",
+        showlegend=(row == 1)), row=row, col=1)
+    cw = in_window(reviewed, start, end)
+    for code, name, colour, symbol in SELECTED_SERIES:
+        m = (cw["best_hypothesis"] == code).to_numpy()
+        legend_entry = bool(m.any()) and name not in shown
+        if legend_entry:
+            shown.add(name)
+        fig.add_trace(go.Scatter(
+            x=cw["time"][m], y=corr_sel[cw.index][m], mode="markers",
+            marker=dict(size=5, color=colour, symbol=symbol),
+            name=f"corrected: {name}", legendgroup=f"c{code}",
+            showlegend=legend_entry), row=row, col=1)
+    fig.update_xaxes(range=[start, end], row=row, col=1)
+    fig.update_yaxes(range=[0, 40], title_text="Range (km)", row=row, col=1)
+fig.update_layout(height=700, margin=dict(b=80),
+                  legend=dict(orientation="h", yanchor="top", y=-0.08,
+                              x=0.5, xanchor="center"))
+show(fig, "Automated first-pass vs analyst-corrected hypothesis selection at B20")
+```
+
+**From tracks to a range for every call.** Everything so far assigns ranges to
+autocorrelation *windows* — one row per minute of track. Density estimation,
+however, counts individual **calls**, so the final step goes back to the
+detection file (@sec-autocorr), which holds every single detected call with its
+peak time. For each corrected track, the selected range is **linearly
+interpolated against time onto the peak time of every call** that falls within
+the track's span (`interpolate_call_ranges()`, the port of
+`interpolate_for_call_ranges_marianas.m`). The result is an estimated range —
+`interp_range` — **for each detected call on a track**; calls outside any
+corrected track (noise detections, rejected or unassigned groups) receive none.
+This per-call range table is what the distance-sampling density estimation
+consumes (@sec-distance_sampling).
+
+```{python}
+#| label: call-interpolation
+#| code-summary: "Interpolate the corrected track ranges onto every detected call"
+from whaletracks.detection.hypothesis_selection import interpolate_call_ranges
+
+calls_ranged, _ = interpolate_call_ranges(matlab_corr, calls)
+n_ranged = calls_ranged["interp_range"].notna().sum()
+print(f"{len(calls_ranged)} detected calls in the B20 detection file; "
+      f"{n_ranged} lie on a corrected track and receive an estimated range")
+calls_ranged.loc[calls_ranged["interp_range"].notna(),
+                 ["peak_time", "peak_signal", "interp_range"]].head(3)
+```
 
 ## Assumptions and limitations {#sec-mp_limitations}
 
@@ -666,6 +878,7 @@ the method can be trusted:
 | End-to-end detection + autocorrelation | `whaletracks-detect` (`cli/run_detection.py`) |
 | Timing → range matching | `whaletracks/detection/range_estimation.py` |
 | Range CLI (loads data, writes CSV, plots) | `whaletracks-plot-ranges` (`cli/plot_ranges.py`) |
+| Hypothesis selection, analyst review, per-call interpolation | `whaletracks/detection/hypothesis_selection.py` / `whaletracks-select` |
 
 Run parameters for each command live in `whaletracks/config/*.yaml`; see the
 package `README.md` for setup and usage.

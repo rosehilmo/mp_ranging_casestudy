@@ -9,7 +9,7 @@ channel: "HHZ,EHZ,ELZ,BHZ,EDH"   # channels to try (first available is used)
 
 # Pick one station at a time (recommended)
 station_list:
-  - B19
+  - B20
 
 # Time window for picking; each chunk spans chunk_length_s seconds.
 starttime: "2012-7-31T21:30:00.000"

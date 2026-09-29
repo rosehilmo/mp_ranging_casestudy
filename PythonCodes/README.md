@@ -7,7 +7,7 @@ hydrophone data and estimation of whale-to-station range from the timing of
 multipath acoustic arrivals.
 
 The `whaletracks` package is the modernized, config-driven form of the original
-scripts: a shared library core, five command-line entry points, and YAML
+scripts: a shared library core, six command-line entry points, and YAML
 configuration files that hold every run parameter (nothing is hardcoded in the
 source).
 
@@ -31,14 +31,18 @@ whaletracks/
   detection/   detect_calls.py                 # spectrogram / kernel / cross-correlation
                event_analyzer.py               # peak picking -> detection DataFrames
                basic_ranging_model.py          # analytic straight-ray helper (sets multipath search window)
+               range_estimation.py             # timing -> range matching (shared with the tutorial)
+               hypothesis_selection.py         # semi-automated multipath hypothesis selection (MATLAB port)
                manual_picking.py               # helpers for the manual picker (distinct math)
   cli/         run_detection.py                # automated detection + ranging
                plot_ranges.py                  # range estimation + plots
+               select_hypotheses.py            # hypothesis selection + analyst review
                make_histogram.py               # yearly detection histogram
                verify_calls.py                 # interactive call verification (GUI)
                manual_picker.py                # interactive manual picking (GUI)
   config/      detect_fin.yaml, detect_brydes.yaml   # detection configs (per species)
                ranges_fin.yaml, ranges_brydes.yaml   # range-estimation configs
+               select_fin.yaml, select_brydes.yaml   # hypothesis-selection configs
                verify_calls.yaml, manual_picker.yaml
 tests/         golden-master + regression tests
 data/
@@ -60,7 +64,7 @@ Each command takes `--config <yaml>` and writes CSVs / figures. Run from the
 ### Automated detection + multipath ranging
 ```bash
 whaletracks-detect --config whaletracks/config/detect_fin.yaml               # all stations
-whaletracks-detect --config whaletracks/config/detect_brydes.yaml --station B19
+whaletracks-detect --config whaletracks/config/detect_brydes.yaml --station B20
 ```
 Downloads waveforms from IRIS, detects calls, measures SNR/amplitude, and
 autocorrelates the detection score to time multipath arrivals. There is one
@@ -80,6 +84,18 @@ theoretical timing-vs-distance curve (shared BELLHOP ray table from
 `data/bellhop_arrival_models/`, or the analytic model) and writes range
 estimates to `data/<species>_whale/`. Offline — runs on the shipped CSVs
 (`ranges_fin.yaml` for fin).
+
+### Multipath hypothesis selection (semi-automated)
+```bash
+whaletracks-select --config whaletracks/config/select_fin.yaml --station B20            # automated
+whaletracks-select --config whaletracks/config/select_fin.yaml --station B20 --review   # + analyst loop (GUI)
+```
+Port of the MATLAB `clean_group_ranges.m` (Hilmo et al. 2025): groups the raw
+ranges, links qualifying groups into whale tracks, and assigns the best timing
+hypothesis (MP1−Direct / MP2−MP1 / MP3−MP2) per group by minimising the
+mismatch between consecutive groups. `--review` replays the interactive
+analyst verification (accept / override / reject) and writes a
+`*_corrected.csv`. Offline; the worked station is B20 (CORTADO_TEST dataset).
 
 ### Detection histogram
 ```bash
@@ -103,10 +119,14 @@ MPLBACKEND=Agg python -m pytest -q
 
 The suite is a **golden-master safety net**: numeric outputs of the library
 core were captured from the original code and are re-checked against the
-refactored code, so the refactor is provably output-preserving. `test_plot_ranges.py`
-additionally confirms the bellhop-mode range columns for B01 match the committed
-`MarianasAutoFiles/Marianas_auto_B01_v2.csv` exactly. GUI/network CLIs are covered
-by import / `--help` / config-parse smoke tests only.
+refactored code, so the refactor is provably output-preserving.
+`test_plot_ranges.py` confirms the bellhop-mode range columns for Bryde's B01
+match the committed `data/brydes_whale/Marianas_auto_B01_v2.csv` exactly, and
+`test_plot_ranges_fin.py` locks the fin B20 (CORTADO_TEST) ranging output. The
+hypothesis-selection port is covered by synthetic structural tests; its MATLAB
+golden-master activates when the reference output lands (see
+`specs/002-hypothesis-selection/`). GUI/network CLIs are covered by import /
+`--help` / config-parse smoke tests only.
 
 ## Known issues
 

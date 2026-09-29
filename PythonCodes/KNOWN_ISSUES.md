@@ -131,8 +131,9 @@ fin profile reproduces the published method (Hilmo & Wilcock 2024; Hilmo et al.
    committed B20 CORTADO_TEST output was regenerated under this gate
    (7140 → 7105 rows). The offline Bryde's gate is unchanged (centre ≥1 only,
    defaults) — the B01 golden output is untouched. The committed
-   `Marianas_auto_B19_v2.csv` still reflects the old ≥1 gate (its fate is an
-   open author decision).
+   `Marianas_auto_B19_v2.csv` still reflects the old ≥1 gate; per the author
+   (2026-09-29) the worked/tested fin station is **B20** everywhere, and the
+   B19 files remain only as shipped legacy data.
 
 3. **Amplitude/SNR reference time made consistent.** The legacy fin script
    passed `utcstart_chunk` to the amplitude routine while passing
@@ -159,7 +160,57 @@ fin profile reproduces the published method (Hilmo & Wilcock 2024; Hilmo et al.
    20-based recomputation would give `[14.5, 20.5]` — left for the author to
    decide before any detection re-run.
 
+7. **Fin selection grouping/track parameters corrected to the published values
+   (author decision, 2026-09-29).** Hilmo et al. (2025) group sequential ranges
+   within **1.5 km** and 1 h, and link groups of ≥12 ranges with **< 3 h** gaps
+   into tracks. The supplied MATLAB source (`clean_group_ranges.m`) drifted to
+   **1.6 km** and **2 h**; the fin config (`select_fin.yaml`) and the library
+   defaults now use the published 1.5 km / 3 h. The Bryde's config keeps the
+   MATLAB 1.6 km / 2 h (no published Bryde's selection to correct against),
+   and the golden-master test pins the MATLAB script's own 1.6 km / 2 h since
+   it verifies port fidelity, not the production config. Two additional
+   qualification criteria in the MATLAB source are **not** described in the
+   paper and are retained as-is: mean window call count > 10 and < 50 % of a
+   group's MP1−Direct ranges equal to zero.
+
 The fin detection path could not be executed here (needs IRIS access and a fin
 station table, `Station_info_Marianas_fin.csv`, which is not distributed). It is
 verified structurally (imports, config parse, `--help`); the author should
 validate a fin run on real data.
+
+## Hypothesis-selection port (feature 002) — deliberate deviations
+
+The Python port of `MATLABCodes/clean_group_ranges.m` /
+`interpolate_for_call_ranges_marianas.m`
+(`whaletracks/detection/hypothesis_selection.py`) preserves the MATLAB
+behaviour exactly, including its quirks (supertrack boundary groups belong to
+the earlier segment and cross-boundary junctions are never scored;
+single-group supertracks get `best_hypothesis = NaN`; combination ties break
+to the first minimum in MATLAB `combinations` order; NaN-cost combinations are
+omitted as MATLAB `min` does; the >18-group midpoint split uses MATLAB
+half-away-from-zero rounding). Four deliberate deviations, all
+crash-avoidance or exact-equivalent:
+
+1. **Chunked enumeration.** MATLAB materialises the full 3^n `combinations`
+   table and runs out of memory somewhere around n = 14 groups (the B20
+   CORTADO data contains a 17-group supertrack → 3^17 ≈ 129 M combinations,
+   ~17 GB as a MATLAB table; the commented-out manual `gapinds` edits in the
+   source show segments were split by hand when this happened). The port
+   streams the same enumeration in fixed-size chunks — identical argmin,
+   bounded memory (~2 min for the 17-group segment).
+2. **sqrt skipped in the cost.** The MATLAB cost is
+   `sqrt(sum(diff^2))`; sqrt is monotonic, so the port compares the
+   unrooted sum. The argmin is unchanged.
+3. **Empty-segment guard.** Degenerate duplicate segment boundaries (possible
+   after midpoint splits) would crash MATLAB (`combinations` of an empty
+   struct); the port skips such segments.
+4. **Interpolation guard.** `interp1` errors on supertracks with fewer than
+   two rows; the port skips them (their `interp_range` stays NaN).
+
+**Golden-master pending**: no MATLAB reference output exists in the repo (the
+`writetable` lines are commented out). `tests/test_hypothesis_selection.py`
+covers the port structurally on synthetic data; the golden test is skipped
+until the author runs `clean_group_ranges.m` (MATLAB ≥ R2023a) on the repo's
+`Marianas_auto_B20_CORTADO_TEST_v2.csv` (B20 everywhere per author direction,
+2026-09-29) and adds `B20_grouped_ranges_CORTADO_TEST_matlab.csv` — noting the
+17-group-supertrack memory caveat above.

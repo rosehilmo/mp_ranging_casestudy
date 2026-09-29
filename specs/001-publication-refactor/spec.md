@@ -139,7 +139,9 @@ Refactor discipline: **preserve outputs exactly**; flag suspected bugs in
       same discipline.
 - [ ] Per-output provenance manifest (station/channel/time + config id).
 - [~] Fin autocorrelation intermediates shipped so fin `plot_ranges` is
-      reproducible offline — **B19 and B20 (CORTADO_TEST) done and test-locked;
+      reproducible offline — **B20 (CORTADO_TEST) done and test-locked; the
+      worked/tested fin station is B20 everywhere (PI, 2026-09-29). B19's
+      intermediates remain shipped but are legacy (old ranging gate, untested);
       other fin stations pending.**
 - [ ] FDSN password rotated by the PI (was hardcoded upstream).
 - [ ] Branch `modernize-python-segment` reviewed and merged.

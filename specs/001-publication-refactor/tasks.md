@@ -59,22 +59,27 @@ description: "Task list for the publication-readiness refactor"
 ## Phase 5: Remaining Python debt (PENDING)
 
 - [x] T024 [QC] Ship fin autocorrelation intermediates so fin ranging is reproducible offline — **B19 and B20 done**: B19 `Marianas_auto_B19_mp_v2.csv` shipped and `range_estimation.py` reproduces `Marianas_auto_B19_v2.csv` from it (regenerated from the shipped timings — the stale 38k-row output that included the Feb 2012 airgun period was replaced with the 6474-row Mar–Oct 2012 result per Hilmo et al. 2025); B20 CORTADO_TEST inputs + output shipped and locked by `tests/test_plot_ranges_fin.py` (with the `valid_end` airgun cut). Other fin stations still need their autocorr intermediates.
-- [ ] T024b **Decide the fate of the B19 fin outputs** (PI): since the tutorial switched to B20, the regenerated `Marianas_auto_B19_v2.csv` is committed but untested and unreferenced — either add a B19 golden test or drop the B19 data files.
+- [x] T024b **Decide the fate of the B19 fin outputs** — resolved by the PI's "use B20 everywhere, not B19" (2026-09-29): all configs, tests, examples and the 002 golden target now use B20 (CORTADO_TEST); the B19 files stay in the repo as shipped legacy data only (no test, no references). Removing them entirely remains open to the PI.
 - [ ] T025 Add a per-output provenance manifest (station/channel/time + config id) — Principle III
 - [ ] T026 Review + merge branch `modernize-python-segment`; push
 - [ ] T027 **PI action**: rotate the FDSN password exposed in upstream history
 
-## Phase 6: Convert MATLAB process to Python (PENDING)
+## Phase 6: Convert MATLAB process to Python (→ superseded by feature 002)
 
 > Scope change (PI, 2026-09-25): the MATLAB segment is to be **ported to Python**,
 > not preserved as MATLAB. Same preserve-exactly discipline applies to the
 > *outputs*: the Python port must reproduce the MATLAB numeric results.
+>
+> **Superseded (PI, 2026-09-29):** the port is scoped to the **semi-automated
+> multipath hypothesis selection** (plus a tutorial section after
+> `#sec-results`) and now runs as its own feature —
+> `specs/002-hypothesis-selection/`. Key inventory finding (T028): the
+> selection algorithm is NOT in `MATLABCodes/` (only downstream plotting /
+> density scripts are); the PI must supply the MATLAB source + a reference
+> input/output pair.
 
-- [ ] T028 Inventory `MATLABCodes/`: entry points, inputs, outputs, and overlap with the existing Python pipeline
-- [ ] T029 Capture MATLAB reference outputs to serve as golden-master targets for the port
-- [ ] T030 Port the process to Python (fold into `whaletracks` where it overlaps; new modules/CLIs where it doesn't)
-- [ ] T031 [QC] Confirm the Python port reproduces the MATLAB outputs; document any deliberate deviation in `KNOWN_ISSUES.md`
-- [ ] T032 Document the ported workflow in README (retire or archive `MATLABCodes/`)
+- [x] T028 Inventory `MATLABCodes/`: entry points, inputs, outputs, and overlap with the existing Python pipeline — done 2026-09-29; findings recorded in `specs/002-hypothesis-selection/spec.md`
+- [ ] ~~T029–T032~~ moved to feature 002 (see its Completion Criteria)
 
 ## Phase 7: R segment (PENDING)
 

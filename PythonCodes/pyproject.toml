@@ -32,6 +32,7 @@ whaletracks-plot-ranges = "whaletracks.cli.plot_ranges:main"
 whaletracks-histogram = "whaletracks.cli.make_histogram:main"
 whaletracks-verify = "whaletracks.cli.verify_calls:main"
 whaletracks-pick = "whaletracks.cli.manual_picker:main"
+whaletracks-select = "whaletracks.cli.select_hypotheses:main"
 
 [tool.setuptools.packages.find]
 include = ["whaletracks*"]

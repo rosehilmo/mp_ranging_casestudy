@@ -50,8 +50,9 @@ Method and engineering decisions, with rationale. Back-filled from the refactor.
 - **Ranging logic factored into `whaletracks/detection/range_estimation.py`**
   (2026-09-28): side-effect-free functions (`bellhop_timings`,
   `estimate_ranges_from_timings`) shared by the `plot_ranges` CLI and the
-  tutorial; verified byte-identical to the pre-factor CLI output for fin B19
-  and Bryde's B01.
+  tutorial; verified byte-identical to the pre-factor CLI output at the time
+  for fin B19 and Bryde's B01. **B20 is the worked/tested fin station
+  everywhere (PI, 2026-09-29)**; B19 files remain shipped as legacy only.
 - **Tutorial worked example = station B20, CORTADO_TEST dataset** (PI,
   2026-09-28), replacing B19. Optional tz-safe `valid_start`/`valid_end` bounds
   were added to the ranging step; B20 uses `valid_end = 2013-02-01` to exclude
