@@ -164,7 +164,10 @@ threshold variations) is documented as a deliberate, reviewed deviation.
 
 - **Publication figures**: matplotlib, static, ≥ 300 DPI PNG or vector PDF.
 - **Exploratory / student-facing (tutorial) figures**: Plotly (interactive
-  hover/zoom).
+  hover/zoom). *Recorded deviation (PI decision, 2026-09-26):* the
+  `multipath_ranging` tutorial renders its Plotly figures as **static PNGs**
+  (kaleido, 2× scale) because the JupyterLab file preview sandboxes JavaScript —
+  interactive divs never paint and leave layout gaps there.
 - **Image display in notebooks**: matplotlib `imshow`.
 - **Colour accessibility**: all figures must be colourblind-safe. Categorical /
   line series use the Okabe–Ito qualitative palette (avoid red–green pairings),

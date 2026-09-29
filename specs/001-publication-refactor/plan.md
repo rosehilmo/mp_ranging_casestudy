@@ -46,16 +46,17 @@ with `conda env create -f environment.yml`.
       published stations, BELLHOP tables, shipped CSVs, cited literature)
 - [x] Coordinate systems/units are consistent (UTC, Hz, range m/km, depth m
       positive-down, WGS84)
-- [x] Figure standards will be followed (tutorial = Plotly; publication =
-      matplotlib; captions disclosed)
+- [x] Figure standards will be followed (tutorial = Plotly rendered as static
+      PNGs — recorded deviation, see constitution Figure Standards; publication =
+      matplotlib; Okabe–Ito colourblind-safe palette; captions disclosed)
 - [x] Quality checks are incorporated (golden-master, ruff, pytest, quarto
       render)
 
 **Issues to resolve**:
 - Per-output provenance manifest (Principle III) not yet materialized — ranges
   are traceable via config + file names but no explicit manifest.
-- Fin autocorrelation intermediates absent → fin `plot_ranges` not reproducible
-  offline (only Bryde's B01 verified). Ship them or document the gap.
+- Fin autocorrelation intermediates: **B19 and B20 (CORTADO_TEST) shipped and
+  test-locked**; remaining fin stations still need theirs (or document the gap).
 - FDSN password rotation is a **PI action** outside the repo.
 - MATLAB/R portability bounded by native runtimes (Principle VI caveat).
 
@@ -91,7 +92,10 @@ commands below, and data is organized by species rather than by processing tier.
 
 ### Stage 2: Ranging (`whaletracks-plot-ranges`)
 - **Input**: autocorrelation CSVs + BELLHOP tables, `ranges_{species}.yaml`
-- **Processing**: match each delay to the nearest BELLHOP range (MP1/MP2/MP3)
+- **Processing**: match each delay to the nearest BELLHOP range (MP1/MP2/MP3),
+  via `detection/range_estimation.py` (pure functions shared with the tutorial);
+  optional `valid_start`/`valid_end` bounds exclude corrupted periods (B20:
+  `valid_end = 2013-02-01`, airgun survey)
 - **Output**: `data/{species}_whale/Marianas_auto_{station}_v2.csv` + figures
 
 ### Stage 3: Summaries & labeling
@@ -110,6 +114,7 @@ commands below, and data is organized by species rather than by processing tier.
 | `cli/plot_ranges.py` (`whaletracks-plot-ranges`) | delays → range | auto CSV + BELLHOP, config | `Marianas_auto_{station}_v2.csv`, figs |
 | `cli/make_histogram.py` (`whaletracks-histogram`) | yearly histogram | detection CSV | PNG |
 | `cli/verify_calls.py` / `manual_picker.py` | interactive labeling | FDSN + config | verified CSVs |
+| `detection/range_estimation.py` | pure timing→range functions (`bellhop_timings`, `estimate_ranges_from_timings`) | auto CSV + BELLHOP tables | ranges DataFrame |
 | `detection/{detect_calls,event_analyzer,basic_ranging_model,manual_picking}.py` | library core | — | — |
 | `tutorials/multipath_ranging.qmd` | fin-whale teaching doc | shipped data | HTML |
 
@@ -127,8 +132,9 @@ the Python segment.
 
 ## Open Questions
 
-- [ ] Ship fin autocorrelation intermediates (make fin `plot_ranges`
-      offline-reproducible) or document why not?
+- [x] Ship fin autocorrelation intermediates (make fin `plot_ranges`
+      offline-reproducible) — done for B19 + B20 (CORTADO_TEST, test-locked);
+      remaining fin stations still open.
 - [ ] MATLAB → Python conversion (PI decision): what does `MATLABCodes/` compute,
       how much overlaps the existing `whaletracks` pipeline, and what MATLAB
       reference outputs anchor the port's golden check?

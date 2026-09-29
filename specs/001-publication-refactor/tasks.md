@@ -57,7 +57,8 @@ description: "Task list for the publication-readiness refactor"
 
 ## Phase 5: Remaining Python debt (PENDING)
 
-- [x] T024 [QC] Ship fin autocorrelation intermediates so fin ranging is reproducible offline — **B19 done**: `Marianas_auto_B19_mp_v2.csv` shipped; `range_estimation.py` reproduces `Marianas_auto_B19_v2.csv` from it (regenerated from the shipped timings — the stale 38k-row output that included the Feb 2012 airgun period was replaced with the 6474-row Mar–Oct 2012 result per Hilmo et al. 2025); locked by `tests/test_plot_ranges_fin.py`. Other fin stations still need their autocorr intermediates.
+- [x] T024 [QC] Ship fin autocorrelation intermediates so fin ranging is reproducible offline — **B19 and B20 done**: B19 `Marianas_auto_B19_mp_v2.csv` shipped and `range_estimation.py` reproduces `Marianas_auto_B19_v2.csv` from it (regenerated from the shipped timings — the stale 38k-row output that included the Feb 2012 airgun period was replaced with the 6474-row Mar–Oct 2012 result per Hilmo et al. 2025); B20 CORTADO_TEST inputs + output shipped and locked by `tests/test_plot_ranges_fin.py` (with the `valid_end` airgun cut). Other fin stations still need their autocorr intermediates.
+- [ ] T024b **Decide the fate of the B19 fin outputs** (PI): since the tutorial switched to B20, the regenerated `Marianas_auto_B19_v2.csv` is committed but untested and unreferenced — either add a B19 golden test or drop the B19 data files.
 - [ ] T025 Add a per-output provenance manifest (station/channel/time + config id) — Principle III
 - [ ] T026 Review + merge branch `modernize-python-segment`; push
 - [ ] T027 **PI action**: rotate the FDSN password exposed in upstream history

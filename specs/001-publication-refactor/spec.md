@@ -40,7 +40,10 @@ Concretely:
 - **Detection / range CSVs** — `data/{fin_whale,brydes_whale}/`: shipped
   detections (`{station}_mp.csv`), autocorrelation intermediates, and range
   outputs (`Marianas_auto_{station}_v2.csv`), plus Bryde's long-call year picks
-  and `All_Brydes_verified.csv`.
+  and `All_Brydes_verified.csv`. Fin autocorrelation intermediates are shipped
+  for **B19** and **B20**; the tutorial's worked example uses the B20
+  `*_CORTADO_TEST` files with `valid_end = 2013-02-01` excluding the Feb 2013+
+  airgun survey (7140 ranged windows, Mar 2012 – Jan 2013).
 
 ### Secondary Data
 
@@ -65,9 +68,13 @@ The multipath ranging method (see the tutorial and Hilmo & Wilcock 2024):
 3. **Delay measurement** — autocorrelation of the detection score over a ~20-min
    window; peaks give the multipath delays.
 4. **Ranging** — match each measured delay against the **BELLHOP** travel-time
-   tables (nearest-point lookup). The analytic straight-ray model
-   (`basic_ranging`) is used **only** to set the multipath search window, not for
-   final ranges.
+   tables (nearest-point lookup), implemented in
+   `whaletracks/detection/range_estimation.py` (shared by the `plot_ranges` CLI
+   and the tutorial), with optional `valid_start`/`valid_end` date bounds to
+   exclude corrupted periods (e.g. airgun surveys). A range is attempted when
+   the window's centre minute has ≥ 1 detected call (fin; Bryde's also requires
+   ≥ 3 in the window). The analytic straight-ray model (`basic_ranging`) is used
+   **only** to set the multipath search window, not for final ranges.
 
 Refactor discipline: **preserve outputs exactly**; flag suspected bugs in
 `KNOWN_ISSUES.md`; keep conda; document any deliberate behavioural deviation.
@@ -78,29 +85,36 @@ Refactor discipline: **preserve outputs exactly**; flag suspected bugs in
 
 - Installable `whaletracks` package (`pyproject.toml`, editable install) with 5
   `whaletracks-*` console scripts and a cleaned, ruff-clean, import-canonical
-  library core.
+  library core, including the factored ranging module
+  `detection/range_estimation.py` (`bellhop_timings`,
+  `estimate_ranges_from_timings`).
 - YAML configs: `detect_fin.yaml`, `detect_brydes.yaml`, `ranges_fin.yaml`,
   `ranges_brydes.yaml`, `verify_calls.yaml`, `manual_picker.yaml`.
 
 ### Tests
 
-- Golden-master suite in `PythonCodes/tests/` (core numeric outputs; B01
-  BELLHOP-mode ranges byte-identical to `Marianas_auto_B01_v2.csv`); CLI
-  config-parse and GUI import/`--help` smoke tests.
+- Golden-master suite in `PythonCodes/tests/` (core numeric outputs; Bryde's B01
+  BELLHOP-mode ranges byte-identical to `Marianas_auto_B01_v2.csv`; fin B20
+  CORTADO_TEST ranges with the airgun `valid_end` bound locked by
+  `test_plot_ranges_fin.py`); CLI config-parse and GUI import/`--help` smoke
+  tests.
 
 ### Documentation
 
 - `PythonCodes/README.md` (setup, layout, commands, testing, known issues).
-- `PythonCodes/tutorials/multipath_ranging.qmd` — fin-whale Quarto tutorial with
-  executable Plotly figures, citations (`references.bib`), and the AI-disclosure
-  label; renders clean via `quarto render`.
+- `PythonCodes/tutorials/multipath_ranging.qmd` — fin-whale Quarto tutorial
+  (worked example: station B20, CORTADO_TEST dataset) with executable,
+  colourblind-safe Plotly figures rendered as static PNGs (kaleido; deliberate
+  deviation — see constitution Figure Standards), citations (`references.bib`),
+  and the AI-disclosure label; renders clean via `quarto render`.
 - `KNOWN_ISSUES.md` — suspected bugs, flagged not fixed.
 
 ## Validation Approach
 
 - `MPLBACKEND=Agg python -m pytest -q` green; `ruff` clean — **before every
   commit** (lab rule).
-- Golden-master byte-identical check for B01 ranges.
+- Golden-master byte-identical checks for Bryde's B01 and fin B20 CORTADO_TEST
+  ranges.
 - `quarto render multipath_ranging.qmd` executes all cells against shipped data
   and resolves all citations (only the book-only `@sec-distance_sampling`
   cross-ref is expected to warn).
@@ -122,8 +136,9 @@ Refactor discipline: **preserve outputs exactly**; flag suspected bugs in
 - [ ] R segment (`Brydes_DE.R`) refactored (or ported — TBD with PI) under the
       same discipline.
 - [ ] Per-output provenance manifest (station/channel/time + config id).
-- [ ] Fin autocorrelation intermediates shipped so fin `plot_ranges` is
-      reproducible offline (currently only Bryde's B01 is).
+- [~] Fin autocorrelation intermediates shipped so fin `plot_ranges` is
+      reproducible offline — **B19 and B20 (CORTADO_TEST) done and test-locked;
+      other fin stations pending.**
 - [ ] FDSN password rotated by the PI (was hardcoded upstream).
 - [ ] Branch `modernize-python-segment` reviewed and merged.
 

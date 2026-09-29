@@ -37,10 +37,28 @@ Method and engineering decisions, with rationale. Back-filled from the refactor.
   `MultipathRanging_Fins.py` rejected T-phases via `db_amps+5 > db_amps_eq`; this
   was never published (both papers handled T-phases/earthquakes manually and via
   track association). Dropped as a deliberate, documented deviation.
-- **Fin vs Bryde's threshold variations kept.** Published fin ranging attempts a
-  range when the center minute has ≥ 2 calls and the 20-min window has ≥ 10;
-  Bryde's uses center ≥ 1 / window ≥ 3. Both retained per PI ("keep the
-  variations").
+- **Fin vs Bryde's threshold variations kept.** The ranging gate attempts a
+  range when the window's centre minute (±30 s) has ≥ 1 detected call (fin), or
+  centre ≥ 1 *and* window ≥ 3 (Bryde's) — per the published code. The paper's
+  ≥ 2 calls/min and ≥ 10 per 20-min window criteria are **not** part of the
+  ranging step: they belong to the upstream detection screening and the
+  downstream density/track workflow. (Corrected 2026-09-28 — earlier drafts,
+  including a previous version of this document, misattributed them to ranging.)
+  Variations retained per PI ("keep the variations").
+- **Ranging logic factored into `whaletracks/detection/range_estimation.py`**
+  (2026-09-28): side-effect-free functions (`bellhop_timings`,
+  `estimate_ranges_from_timings`) shared by the `plot_ranges` CLI and the
+  tutorial; verified byte-identical to the pre-factor CLI output for fin B19
+  and Bryde's B01.
+- **Tutorial worked example = station B20, CORTADO_TEST dataset** (PI,
+  2026-09-28), replacing B19. Optional tz-safe `valid_start`/`valid_end` bounds
+  were added to the ranging step; B20 uses `valid_end = 2013-02-01` to exclude
+  the Feb 2013+ airgun survey → 7140 ranged windows (Mar 2012 – Jan 2013),
+  matching Hilmo et al. (2025).
+- **Unphysical model values are filtered out of figures, never accommodated by
+  rescaling axes** (PI preference, 2026-09-28). The tutorial delay-curve masks
+  BELLHOP near-field artifacts (< 0.3 km; see `KNOWN_ISSUES.md` #10); the data
+  files themselves are untouched (preserve-exactly).
 
 ## Data-layout decisions
 
@@ -60,6 +78,12 @@ Method and engineering decisions, with rationale. Back-filled from the refactor.
   chapter house style (a stub the tutorial fills), with student-facing **Plotly**
   figures and cross-references. AI disclosure via YAML metadata + header callout
   (PI chose the metadata form over monospace body text).
+- **Tutorial figures render as static PNGs** (Plotly + kaleido, `renderer =
+  "png"`, scale 2), a deliberate deviation from the interactive-Plotly default
+  (PI decision, 2026-09-26): the JupyterLab file preview sandboxes JavaScript,
+  so interactive divs never paint and leave layout gaps. All figures are
+  colourblind-safe (Okabe–Ito palette + line-style/marker variation; see
+  constitution Figure Standards).
 - **Literature handling**: JASA 2024 PDF is ASA copyright → `literature/`
   gitignored; cite, don't reproduce. ESR 2025 is CC-BY. `references.bib` holds
   factual bibliographic metadata only.
