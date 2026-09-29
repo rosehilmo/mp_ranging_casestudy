@@ -37,14 +37,16 @@ Method and engineering decisions, with rationale. Back-filled from the refactor.
   `MultipathRanging_Fins.py` rejected T-phases via `db_amps+5 > db_amps_eq`; this
   was never published (both papers handled T-phases/earthquakes manually and via
   track association). Dropped as a deliberate, documented deviation.
-- **Fin vs Bryde's threshold variations kept.** The ranging gate attempts a
-  range when the window's centre minute (±30 s) has ≥ 1 detected call (fin), or
-  centre ≥ 1 *and* window ≥ 3 (Bryde's) — per the published code. The paper's
-  ≥ 2 calls/min and ≥ 10 per 20-min window criteria are **not** part of the
-  ranging step: they belong to the upstream detection screening and the
-  downstream density/track workflow. (Corrected 2026-09-28 — earlier drafts,
-  including a previous version of this document, misattributed them to ranging.)
-  Variations retained per PI ("keep the variations").
+- **Fin ranging gate = the published 2025 criteria, at detection AND offline
+  ranging (PI, 2026-09-29).** A fin window is ranged only when its centre minute
+  (±30 s) holds ≥ 2 detected calls and the surrounding 20-min window holds ≥ 10
+  (Hilmo et al. 2025). Originally applied only in `run_detection`; the PI
+  directed applying it in the offline timing→range step too
+  (`estimate_ranges_from_timings`, `ranging:` block in `ranges_fin.yaml`;
+  B20 CORTADO_TEST output regenerated, 7140 → 7105 rows). Bryde's keeps its
+  legacy gates unchanged (detection: centre ≥ 1 / window ≥ 3; offline ranging:
+  centre ≥ 1 only — B01 golden output untouched). The paper's ≥ 12-range
+  track-grouping remains a separate downstream density-workflow step.
 - **Ranging logic factored into `whaletracks/detection/range_estimation.py`**
   (2026-09-28): side-effect-free functions (`bellhop_timings`,
   `estimate_ranges_from_timings`) shared by the `plot_ranges` CLI and the
@@ -53,8 +55,8 @@ Method and engineering decisions, with rationale. Back-filled from the refactor.
 - **Tutorial worked example = station B20, CORTADO_TEST dataset** (PI,
   2026-09-28), replacing B19. Optional tz-safe `valid_start`/`valid_end` bounds
   were added to the ranging step; B20 uses `valid_end = 2013-02-01` to exclude
-  the Feb 2013+ airgun survey → 7140 ranged windows (Mar 2012 – Jan 2013),
-  matching Hilmo et al. (2025).
+  the Feb 2013+ airgun survey → 7105 ranged windows (Mar 2012 – Jan 2013,
+  under the published ≥2/≥10 ranging gate), matching Hilmo et al. (2025).
 - **Unphysical model values are filtered out of figures, never accommodated by
   rescaling axes** (PI preference, 2026-09-28). The tutorial delay-curve masks
   BELLHOP near-field artifacts (< 0.3 km; see `KNOWN_ISSUES.md` #10); the data

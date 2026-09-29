@@ -374,13 +374,14 @@ peak at a feasible multipath lag gives the spacing between the two
 strongest arrivals, without ever isolating individual arrivals.
 
 The detection score itself is the product of cross-correlating a **synthetic
-down-swept template** with the spectrogram (Mellinger & Clark method;
-`detect_calls.py`, see @sec-code_map). @hilmo2024 use a generalised 1-s template
-sweeping 25→15 Hz with a 3-Hz bandwidth, then **refine it per site** toward the
-**lower-frequency** end of the call — the multipaths are enriched in low
-frequencies because the seafloor reflection attenuates the higher ones (roughly
-as frequency squared). The Marianas template sweeps ≈20→15 Hz over 0.8 s
-(`kernel:` block in `config/detect_fin.yaml`). Here we demonstrate the
+down-swept template** with the spectrogram — the spectrogram-correlation method
+of @mellinger1997 (`detect_calls.py`, see @sec-code_map). @hilmo2024 use a
+generalised 1-s template sweeping 25→15 Hz with a 3-Hz bandwidth, then **refine
+it per site** toward the **lower-frequency** end of the call — the multipaths
+are enriched in low frequencies because the seafloor reflection attenuates the
+higher ones (roughly as frequency squared). The Marianas template sweeps
+20→15 Hz over 0.8 s [@hilmo2024, Table I] (`kernel:` block in
+`config/detect_fin.yaml`). Here we demonstrate the
 autocorrelation step on a **synthetic** minute whose delays we know, so the
 recovered value can be checked.
 
@@ -452,9 +453,13 @@ print("EventAnalyzer picked", len(analyzer.df), "calls in the synthetic minute")
 autocorrelation window it takes the strongest-amplitude arrival spacing and, for
 the BELLHOP MP1−Direct, MP2−MP1 and MP3−MP2 curves, finds the range whose
 modelled spacing is closest — the nearest-point inversion of @sec-invert_demo
-applied to every window. The `whaletracks-plot-ranges` command
-(`cli/plot_ranges.py`) wraps this with file loading and plotting; here we call
-the function directly on the measured B20 timings to turn them into ranges:
+applied to every window. Not every window qualifies: following @hilmo2025, a
+range is attempted only when the window's **centre minute holds at least 2
+detected calls** and the **surrounding 20-minute window holds at least 10** —
+a guard against ranging windows with too little whale signal to trust. The
+`whaletracks-plot-ranges` command (`cli/plot_ranges.py`) wraps this with file
+loading and plotting; here we call the function directly on the measured B20
+timings to turn them into ranges:
 
 ```{python}
 #| label: range-estimation
@@ -468,16 +473,18 @@ from whaletracks.detection.range_estimation import (
 bh_dist, mp1_t, mp2_t, mp3_t = bellhop_timings(bh)
 
 # Measured inputs: the per-window autocorrelation timings, and the call
-# detections used to require a call in each window's centre minute.
+# detections used for the ranging gate.
 auto = pd.read_csv(data("data", "fin_whale", "auto_B20_mp_CORTADO_TEST.csv"))
 calls = pd.read_csv(data("data", "fin_whale", "B20_mp_CORTADO_TEST.csv"))
 calls["peak_time"] = pd.to_datetime(calls["peak_time"])
 
-# February 2013 onward is excluded: airgun shots from a seismic survey corrupt
-# the multipath timings in that period (cf. the February 2012 exclusion in
-# Hilmo et al. 2025).
+# Published fin ranging gate (Hilmo et al. 2025): >=2 calls in the centre
+# minute AND >=10 in the surrounding 20-min window. February 2013 onward is
+# excluded: airgun shots from a seismic survey corrupt the multipath timings
+# in that period (cf. the February 2012 exclusion in Hilmo et al. 2025).
 ranges_b20 = estimate_ranges_from_timings(
     auto, calls["peak_time"].unique(), bh_dist, mp1_t, mp2_t, mp3_t,
+    min_center=2, min_window=10, window_length_s=1200,
     valid_end="2013-02-01",
 )
 print(f"ranged {len(ranges_b20)} windows (Feb 2013+ excluded: airgun survey)")
@@ -499,20 +506,24 @@ semi-automated step that selects the timing-model hypothesis so ranges change
 smoothly. Running this over a whole deployment yields a range estimate for every
 qualifying minute.
 
-## Results: a season of ranges {#sec-results}
+## Results: the raw ranging output {#sec-results}
 
 The `ranges_b20` table just computed (@sec-matching) is the ranging result for
 station B20 — one of the seven Marianas OBS in both papers — and is what
 `whaletracks-plot-ranges` writes to
-`data/fin_whale/Marianas_auto_B20_CORTADO_TEST_v2.csv`. A range is estimated for
-each autocorrelation window that has at least one detected call in its centre
-minute; the detection thresholds that build those windows are set in
-`config/detect_fin.yaml` (@sec-autocorr). @fig-ranges shows the range estimate
-through time.
+`data/fin_whale/Marianas_auto_B20_CORTADO_TEST_v2.csv`. Two things to keep in
+mind about this table. First, because we never know *a priori* which two
+arrivals the autocorrelation measured, every window carries **three candidate
+ranges** — one per timing hypothesis (MP1−Direct, MP2−MP1, MP3−MP2) — and the
+table does not say which is real. Second, a range is attempted for *every*
+autocorrelation window that passes the call-count gate (@sec-matching), whether
+or not a whale produced those detections — persistent noise can satisfy the
+gate too. @fig-ranges shows what this raw output looks like, and both caveats
+are visible in it.
 
 ```{python}
 #| label: fig-ranges
-#| fig-cap: "Estimated range to calling fin whales at station B20. Top: MP1−Direct range across the full deployment, coloured by the dB amplitude of the strongest arrival. Middle and bottom: full-width zooms on the central tracks of the busiest early-year (12–13 Apr 2012) and late-year (16–17 Jan 2013) periods, where individual whales approaching and receding are visible. In the zooms the coloured markers are the MP1−Direct range; grey markers show the alternative hypotheses the same spacing would give — MP2−MP1 (open circles) and MP3−MP2 (×) — which sit at longer range."
+#| fig-cap: "Raw ranging output at station B20. Top: MP1−Direct range across the full deployment, coloured by the dB amplitude of the strongest arrival; the scattered points in the summer months are spurious ranges forced by noise (earthquake swarms, T-phases, ship noise) triggering the detector (see text). Middle and bottom: full-width zooms on the central tracks of the busiest early-year (12–13 Apr 2012) and late-year (16–17 Jan 2013) periods, where individual whales approaching and receding are visible. In the zooms the coloured markers are the MP1−Direct range; grey markers show the alternative hypotheses the same spacing would give — MP2−MP1 (open circles) and MP3−MP2 (×) — which sit at longer range. Deciding which hypothesis is real is a downstream, semi-automated step (see text)."
 #| code-fold: true
 from plotly.subplots import make_subplots
 
@@ -568,12 +579,30 @@ fig.update_layout(height=950, margin=dict(b=70),
 show(fig, "B20 ranges: full deployment with two full-width central-track zooms")
 ```
 
-The seasonal structure — clustering of nearby detections during some intervals
-and sparse, distant ones in others — is the kind of pattern that feeds density
-estimation (@sec-distance_sampling). @hilmo2025 ranged fin-whale calls to 40 km
-across the seven Marianas OBS (March 2012–January 2013; February 2012 was
-excluded because airgun shots from a seismic survey prevented ranging) and
-applied point-transect distance sampling to estimate call densities.
+**The hypotheses must be decided.** In the zoom panels each whale's track
+appears three times — the same measured spacings mapped through all three
+timing hypotheses — and only one of the stacked tracks is where the whale
+actually was. @hilmo2025 resolve this with a **semi-automated selection step**
+downstream of the ranging: sequential ranges close in space and time are
+grouped, groups are linked into whale tracks, and the set of hypotheses that
+minimises the range mismatch between consecutive groups is assigned to each
+track; the result is then verified manually against the song spectrograms.
+Which hypothesis wins is strongly range-dependent — MP1−Direct dominates at
+roughly 5–20 km, MP2−MP1 at 20–30 km, and MP3−MP2 at 30–40 km [@hilmo2025] —
+consistent with the refraction argument of @sec-mp_physics: the earlier paths
+drop out as range grows.
+
+**Not every range is a whale.** The ranging step estimates a range whenever the
+detection gate is met, so the full-deployment panel shows scattered apparent
+ranges through the summer months when no fin whale song is present. These are
+**spurious**: noise such as earthquake swarms, T-phases, and ship noise triggers
+the detector often enough to force a range estimate. In the published analysis
+none of these out-of-season ranges met the automated track criteria, and all
+were rejected on manual inspection of their spectrograms [@hilmo2025]. The
+hypothesis-selection step therefore doubles as the filter that removes spurious
+ranges — the raw table in @fig-ranges is an *input* to that step, not a finished
+map of whale positions. Both steps, and the density estimation they feed, are
+taken up later (@sec-distance_sampling).
 
 ## Assumptions and limitations {#sec-mp_limitations}
 

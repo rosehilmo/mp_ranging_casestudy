@@ -43,7 +43,8 @@ Concretely:
   and `All_Brydes_verified.csv`. Fin autocorrelation intermediates are shipped
   for **B19** and **B20**; the tutorial's worked example uses the B20
   `*_CORTADO_TEST` files with `valid_end = 2013-02-01` excluding the Feb 2013+
-  airgun survey (7140 ranged windows, Mar 2012 – Jan 2013).
+  airgun survey (7105 ranged windows, Mar 2012 – Jan 2013, under the published
+  ≥2/≥10 fin ranging gate).
 
 ### Secondary Data
 
@@ -71,9 +72,10 @@ The multipath ranging method (see the tutorial and Hilmo & Wilcock 2024):
    tables (nearest-point lookup), implemented in
    `whaletracks/detection/range_estimation.py` (shared by the `plot_ranges` CLI
    and the tutorial), with optional `valid_start`/`valid_end` date bounds to
-   exclude corrupted periods (e.g. airgun surveys). A range is attempted when
-   the window's centre minute has ≥ 1 detected call (fin; Bryde's also requires
-   ≥ 3 in the window). The analytic straight-ray model (`basic_ranging`) is used
+   exclude corrupted periods (e.g. airgun surveys). Fin ranging uses the
+   published gate (Hilmo et al. 2025): centre minute ≥ 2 detected calls AND
+   ≥ 10 in the surrounding 20-min window; the offline Bryde's gate is the
+   legacy centre ≥ 1. The analytic straight-ray model (`basic_ranging`) is used
    **only** to set the multipath search window, not for final ranges.
 
 Refactor discipline: **preserve outputs exactly**; flag suspected bugs in

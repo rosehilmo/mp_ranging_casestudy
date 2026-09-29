@@ -48,6 +48,7 @@ def _as_bound(value, like):
 def estimate_ranges_from_timings(
     auto_df, calltimes, distance, mp_1_timing, mp_2_timing, mp_3_timing,
     reflectivity=False, mp_1_sub=None, valid_start=None, valid_end=None,
+    min_center=1, min_window=0, window_length_s=1200,
 ):
     """Match autocorrelation timings to ranges; return a ranges DataFrame.
 
@@ -58,8 +59,7 @@ def estimate_ranges_from_timings(
         ``amp_2..5``, ``peaks``, ``snr``, ``db_amps``, ``sum_calls``,
         ``n_calls`` and ``date``.
     calltimes : array-like of datetime
-        Detection peak times; a window is ranged only if at least one call
-        falls in its centre minute (date +/- 30 s).
+        Detection peak times, used for the ranging gate below.
     distance : Series
         Modelled range axis (metres), indexed 0..N-1 to match the timing curves.
     mp_1_timing, mp_2_timing, mp_3_timing : array-like
@@ -73,6 +73,13 @@ def estimate_ranges_from_timings(
         Optional half-open date bounds ``[valid_start, valid_end)`` on the
         window time. Used to exclude periods where ranging is unreliable — e.g.
         airgun-survey intervals that corrupt the multipath timings.
+    min_center, min_window, window_length_s :
+        Ranging gate: a window is ranged only if at least ``min_center`` calls
+        fall in its centre minute (date +/- 30 s) and, when ``min_window`` > 0,
+        at least ``min_window`` calls fall within the full autocorrelation
+        window (date +/- ``window_length_s``/2). The published fin criteria are
+        ``min_center=2, min_window=10`` over a 20-min window (Hilmo et al.
+        2025); the defaults (1, 0) reproduce the legacy Bryde's behaviour.
 
     Returns
     -------
@@ -81,16 +88,23 @@ def estimate_ranges_from_timings(
     dates = [pd.to_datetime(d) for d in auto_df["date"].tolist()]
     times, r_d_mp1, r_mp1_mp2, r_mp2_mp3 = [], [], [], []
     auto_max, auto_snr, auto_amp, auto_count, center_calls = [], [], [], [], []
+    half_window = pd.Timedelta(seconds=window_length_s / 2)
 
     for row in range(len(auto_df)):
         df = auto_df.iloc[row]
         date = dates[row]
-        window = calltimes[
+        center = calltimes[
             (calltimes > date - pd.Timedelta(seconds=30))
             & (calltimes < date + pd.Timedelta(seconds=30))
         ]
-        if len(window) == 0:
+        if len(center) < min_center:
             continue
+        if min_window > 0:
+            window = calltimes[
+                (calltimes > date - half_window) & (calltimes < date + half_window)
+            ]
+            if len(window) < min_window:
+                continue
 
         # Spacings of the four later arrivals from the first; use the strongest.
         timings = [df[f"arrival_{k}"] - df["arrival_1"] for k in (2, 3, 4, 5)]

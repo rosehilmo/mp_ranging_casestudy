@@ -70,11 +70,15 @@ def estimate_ranges(cfg, station, save=None, show=False):
     df_calls["peak_time"] = pd.to_datetime(df_calls["peak_time"])
     df_auto = pd.read_csv(auto_path)
 
+    gate = cfg.get("ranging", {})
     saveranges = estimate_ranges_from_timings(
         df_auto, df_calls["peak_time"].unique(),
         distance, mp_1_timing, mp_2_timing, mp_3_timing,
         reflectivity=bool(cfg.get("reflectivity")), mp_1_sub=mp_1_sub,
         valid_start=cfg.get("valid_start"), valid_end=cfg.get("valid_end"),
+        min_center=gate.get("min_center", 1),
+        min_window=gate.get("min_window", 0),
+        window_length_s=gate.get("window_length_s", 1200),
     )
 
     out_path = os.path.join(cfg["output_dir"], cfg["output_template"].format(station=station))

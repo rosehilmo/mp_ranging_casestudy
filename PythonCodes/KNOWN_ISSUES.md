@@ -124,7 +124,15 @@ fin profile reproduces the published method (Hilmo & Wilcock 2024; Hilmo et al.
    ≥10 calls (Hilmo et al. 2025), overriding this code copy's `≥1` / 10-min
    window. Bryde's keeps its own `≥1` center / `≥3` window. (The ≥12-range
    track-grouping is a separate downstream density-estimation step, not part of
-   the ranging code.)
+   the ranging code.) **Extended 2026-09-29 (author decision):** the same ≥2/≥10
+   gate is now also applied in the *offline* timing→range step
+   (`range_estimation.estimate_ranges_from_timings`, via the `ranging:` block in
+   `ranges_fin.yaml`), which previously required only ≥1 centre-minute call. The
+   committed B20 CORTADO_TEST output was regenerated under this gate
+   (7140 → 7105 rows). The offline Bryde's gate is unchanged (centre ≥1 only,
+   defaults) — the B01 golden output is untouched. The committed
+   `Marianas_auto_B19_v2.csv` still reflects the old ≥1 gate (its fate is an
+   open author decision).
 
 3. **Amplitude/SNR reference time made consistent.** The legacy fin script
    passed `utcstart_chunk` to the amplitude routine while passing
@@ -140,6 +148,16 @@ fin profile reproduces the published method (Hilmo & Wilcock 2024; Hilmo et al.
 5. **FDSN credentials removed.** `MP_Marianas_automation.py` contained a
    plaintext IRIS username/password; the pipeline now uses an anonymous
    `Client('IRIS')` (the data are public). That password should be rotated.
+
+6. **Fin kernel start frequency corrected to the published value (author
+   decision, 2026-09-29).** The `MP_Marianas_automation.py` copy used a 22→15 Hz
+   template, but both papers state the Marianas fin template is **20→15 Hz over
+   0.8 s** (Hilmo & Wilcock 2024, Table I; Hilmo et al. 2025). `detect_fin.yaml`
+   now uses `f0: 20`. Note the shipped fin detection CSVs predate this config and
+   were produced by the author's original runs. The SNR call band `[15.5, 21.5]`
+   is retained as the automation code computed it (from the 22→15 kernel); a
+   20-based recomputation would give `[14.5, 20.5]` — left for the author to
+   decide before any detection re-run.
 
 The fin detection path could not be executed here (needs IRIS access and a fin
 station table, `Station_info_Marianas_fin.csv`, which is not distributed). It is

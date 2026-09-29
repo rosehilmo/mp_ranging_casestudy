@@ -27,6 +27,16 @@ auto_template: "Marianas_auto_{station}_mp_v2.csv"
 output_dir: data/fin_whale
 output_template: "Marianas_auto_{station}_v2.csv"
 
+# Published fin ranging gate (Hilmo et al. 2025): a window is ranged only when
+# its centre minute has >= 2 detected calls AND the surrounding 20-min window
+# has >= 10 (author decision 2026-09-29 to apply it here in the offline ranging
+# step as well as at detection). ranges_brydes.yaml omits this block, keeping
+# the legacy Bryde's gate (centre >= 1 only).
+ranging:
+  min_center: 2
+  min_window: 10
+  window_length_s: 1200
+
 # Fin auto output has no earthquake-band column, so only the auto_max filter
 # applies (max_low_freq_snr is omitted).
 filters:
