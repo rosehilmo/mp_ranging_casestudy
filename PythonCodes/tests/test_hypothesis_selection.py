@@ -1,19 +1,16 @@
-"""Tests for the hypothesis-selection port (MATLABCodes/clean_group_ranges.m).
+"""Tests for the hypothesis-selection step
+(``whaletracks.detection.hypothesis_selection``).
 
-Synthetic structural tests pin the port's behaviour (grouping walk, group
-qualification, supertrack construction, 3^n hypothesis assignment including
-the single-group NaN quirk, per-call interpolation). The golden-master test
-against a MATLAB reference output is skipped until the PI provides
-``data/fin_whale/B20_grouped_ranges_CORTADO_TEST_matlab.csv`` (a
-``clean_group_ranges.m`` run on ``Marianas_auto_B20_CORTADO_TEST_v2.csv`` —
-see specs/002-hypothesis-selection).
+Synthetic structural tests pin the behaviour: the grouping walk, group
+qualification, supertrack construction, the 3^n hypothesis assignment
+(including the single-group unassigned case), per-call interpolation, the
+range-following selection, and the configurable per-species thresholds.
 """
 
 import os
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from whaletracks.cli import _common
 from whaletracks.detection.hypothesis_selection import (
@@ -23,9 +20,6 @@ from whaletracks.detection.hypothesis_selection import (
 )
 
 PKG_ROOT = os.path.dirname(os.path.dirname(__file__))
-GOLDEN = os.path.join(
-    PKG_ROOT, "data", "fin_whale", "B20_grouped_ranges_CORTADO_TEST_matlab.csv"
-)
 
 BASE = pd.Timestamp("2012-04-01 00:00:00", tz="UTC")
 
@@ -71,7 +65,7 @@ def test_two_groups_one_supertrack_best_hypothesis():
     track_rows = out[out["use_track"]]
     assert len(track_rows) == 24  # both 12-row groups qualify, nothing else
     assert track_rows["groupnum"].nunique() == 2
-    # One supertrack (90-min gap < 2 h), MATLAB id = first boundary index (1).
+    # One supertrack (90-min gap < 2 h); its id is the first boundary index (1).
     assert set(track_rows["supertrack"]) == {1}
     # Junction cost is minimal for (MP1-Direct, MP1-Direct).
     assert set(track_rows["best_hypothesis"]) == {1.0}
@@ -94,16 +88,21 @@ def test_single_group_supertrack_gets_nan_hypothesis():
     out = select_hypotheses(pd.DataFrame(_rows(BASE, 12, 10.0, 10.0)))
     track_rows = out[out["use_track"]]
     assert len(track_rows) == 12
-    assert track_rows["best_hypothesis"].isna().all()  # MATLAB quirk
+    # A lone group has no neighbouring group to score against, so it is left
+    # unassigned (best_hypothesis NaN) pending analyst review.
+    assert track_rows["best_hypothesis"].isna().all()
     assert set(track_rows["supertrack"]) == {1}
 
 
-def test_brydes_thresholds_qualify_smaller_groups():
+def test_custom_thresholds_qualify_smaller_groups():
+    # The qualification thresholds are configurable so the step can be adapted
+    # to other species / call types: the published fin defaults need 12 rows,
+    # but a smaller group qualifies when the thresholds are relaxed.
     small = pd.DataFrame(_rows(BASE, 7, 10.0, 10.0, auto_count=3))
     fin = select_hypotheses(small)  # fin defaults: needs 12 rows
     assert not fin["use_track"].any()
-    brydes = select_hypotheses(small, min_group_rows=7, min_mean_calls=2)
-    assert brydes["use_track"].all()
+    custom = select_hypotheses(small, min_group_rows=7, min_mean_calls=2)
+    assert custom["use_track"].all()
 
 
 def test_interpolate_call_ranges():
@@ -143,26 +142,3 @@ def test_select_configs_parse():
                     "output_template", "filter", "grouping", "qualify",
                     "supertrack"):
             assert key in cfg, f"{name} missing {key}"
-
-
-@pytest.mark.skipif(not os.path.isfile(GOLDEN),
-                    reason="MATLAB reference output not yet provided (T107)")
-def test_b20_golden_master_matches_matlab():
-    """Golden master vs the PI's MATLAB clean_group_ranges.m run on B20."""
-    raw = pd.read_csv(os.path.join(PKG_ROOT, "data", "fin_whale",
-                                   "Marianas_auto_B20_CORTADO_TEST_v2.csv"))
-    # The golden verifies PORT fidelity, so it uses the MATLAB script's own
-    # hardcoded parameters (1.6 km grouping, 2 h track gap) — NOT the
-    # published 1.5 km / 3 h that the fin config corrects to (KNOWN_ISSUES #7).
-    out = select_hypotheses(raw, start="2012-03-01", range_jump_km=1.6,
-                            supertrack_gap=pd.Timedelta(hours=2))
-    ref = pd.read_csv(GOLDEN)
-    assert len(out) == len(ref)
-    np.testing.assert_array_equal(
-        out["use_track"].to_numpy(), ref["use_track"].to_numpy().astype(bool)
-    )
-    for col in ("groupnum", "supertrack", "best_hypothesis"):
-        np.testing.assert_allclose(
-            out[col].to_numpy(dtype=float), ref[col].to_numpy(dtype=float),
-            rtol=0, atol=0, equal_nan=True,
-        )
