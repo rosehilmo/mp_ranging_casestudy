@@ -108,3 +108,20 @@ between consecutive groups. Behaviours worth knowing:
   call within the track span; calls outside any track receive no range. This
   per-call table is the ranging pipeline's final product (the input to
   downstream density estimation).
+
+## Demonstration data provenance
+
+The shipped B20 selection tables are demonstration artifacts for the
+`CORTADO_TEST` dataset, not the published analysis:
+
+- `B20_grouped_ranges_CORTADO_TEST.csv` — the **automated** hypothesis selection
+  produced by `whaletracks-select` on the B20 CORTADO ranges.
+- `B20_grouped_ranges_CORTADO_TEST_corrected.csv` — an **analyst-corrected**
+  companion. Because analyst review is interactive, this file was produced by
+  applying the **published** review decisions (Hilmo et al. 2025) to the B20
+  CORTADO automated selection: each automated track is matched to the published
+  run by autocorrelation-window minute, qualified groups (≥ 12 rows) are kept,
+  and each group is assigned the majority of its matched published hypotheses.
+  It illustrates what an analyst-corrected result looks like on this
+  demonstration track; it is **not** a fresh review of the CORTADO data and does
+  not reproduce the published ranges.
