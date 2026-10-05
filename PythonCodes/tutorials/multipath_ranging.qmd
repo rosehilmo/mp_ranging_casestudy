@@ -9,6 +9,7 @@ description: >
   `whaletracks` code. All parameters and figures are derived from
   version-controlled scripts and data in this repository.
 bibliography: references.bib
+from: markdown-example_lists
 format:
   html:
     toc: true
@@ -26,17 +27,28 @@ execute:
 ---
 
 ::: {.callout-note appearance="simple"}
-This chapter is an **AI-generated draft (Claude, Anthropic) — for review.**
+This tutorial is an **AI-generated draft (Claude, Anthropic) — for review.**
 Every number and figure below is produced by executing the version-controlled
 `whaletracks` code against data in this repository; nothing is hand-entered.
 :::
 
+::: {.callout-important appearance="simple"}
+**Demonstration data.** The worked station **B20** uses a `CORTADO_TEST` subset
+provided to illustrate the pipeline end to end. It is **not** the published
+dataset — its ranges and counts do **not** reproduce @hilmo2024 or @hilmo2025.
+The grouped and analyst-corrected selection tables are shipped as pre-generated
+files and loaded below, and the analyst-corrected assignment
+applies the published review decisions to this demonstration track. Everything
+here is a demonstration intermediate: the real density estimation is fed the
+**total interpolated call ranges pooled across stations**, not these per-station
+tables. @sec-hypothesis_selection shows how per-call ranges are produced.
+:::
+
 # Multipath ranging {#sec-multipath_ranging}
 
-Most ocean-bottom seismometers (OBS) record three components, so the
-three-component (3C) method of @sec-distance_sampling is usually available: it
-recovers a call's range from the *direction* of the direct arrival at the
-three-axis sensor. Its reach is limited, though. 3C ranging
+Most ocean-bottom seismometers (OBS) record three components, so a
+three-component (3C) ranging method is usually available: it recovers a call's
+range from the *direction* of the direct arrival at the three-axis sensor. Its reach is limited, though. 3C ranging
 works only for whales at **close range** — within the critical range of the
 seafloor reflection — and it performs well over **soft sediments** but poorly
 over **hard rock**.
@@ -51,10 +63,12 @@ rock rather than soft sediment). Multipath ranging therefore **extends
 monitoring to a much larger area** and suits exactly the hard-bottom sites where
 3C performs poorly.
 
-This chapter explains the method and walks through the parts of the code that
+This tutorial explains the method and walks through the parts of the code that
 implement it, using the Marianas fin-whale deployment as the worked example.
-The method and its application to this deployment are described by
-@hilmo2024 and @hilmo2025.
+The approach originates with @weirathmueller2017, who first ranged vocalizing
+fin whales from the timing and amplitude of multipath arrivals recorded on
+single seafloor seismometers; the method as applied to this deployment is
+described by @hilmo2024 and @hilmo2025.
 
 ## Case study overview {#sec-mp_overview}
 
@@ -74,8 +88,9 @@ spacing between consecutive arrivals — the direct path and its multipaths
 it represents (MP1−Direct, MP2−MP1, …) and matching it against those BELLHOP
 tables (@sec-matching, implemented by `whaletracks-plot-ranges`).
 
-5\. Assemble a **season of range estimates** and quality-control them
-(@sec-results).
+5\. **Apply the ranging across the full year** of recordings, then
+**quality-control** the raw ranges with the semi-automated hypothesis selection
+and analyst review (@sec-results).
 
 6\. Background and further reading (@sec-mp_reading).
 
@@ -328,7 +343,7 @@ a different range. Assigning the spacing to the wrong pair gives the wrong
 distance, so the pair must be identified before the spacing is inverted
 (@sec-matching).
 
-The rest of the chapter takes these two problems in turn — measuring the spacing
+The rest of the tutorial takes these two problems in turn — measuring the spacing
 (@sec-autocorr) and then choosing the pair (@sec-matching) — which together are
 the multipath ranging method.
 
@@ -602,14 +617,14 @@ were rejected on manual inspection of their spectrograms [@hilmo2025]. The
 hypothesis-selection step therefore doubles as the filter that removes spurious
 ranges — the raw table in @fig-ranges is an *input* to that step, not a finished
 map of whale positions. That step is next (@sec-hypothesis_selection); the
-density estimation it feeds comes later (@sec-distance_sampling).
+density estimation those ranges ultimately feed is a separate, downstream
+analysis beyond the scope of this tutorial.
 
 ## Selecting hypotheses: from raw ranges to whale tracks {#sec-hypothesis_selection}
 
 The semi-automated selection of @hilmo2025 is implemented in
-`whaletracks/detection/hypothesis_selection.py` (command: `whaletracks-select`),
-a Python port of the original MATLAB (`MATLABCodes/clean_group_ranges.m`). The
-automated part works in four moves — every threshold below lives in
+`whaletracks/detection/hypothesis_selection.py` (command: `whaletracks-select`).
+The automated part works in four moves — every threshold below lives in
 `config/select_fin.yaml`:
 
 1. **Filter.** Keep windows whose MP1−Direct candidate is under 25 km (and
@@ -715,7 +730,7 @@ show(fig, "Raw three-hypothesis cloud vs selected whale-track ranges at B20, "
 
 What keeps this step *semi*-automated [@hilmo2025] is **analyst verification**:
 the automated assignment is reviewed against the song spectrograms.
-`whaletracks-select --review` replays the MATLAB verification loop (accept `0`,
+`whaletracks-select --review` runs the interactive verification loop (accept `0`,
 override `1`/`2`/`3`, reject `9`), writing a `*_corrected.csv`. Groups the
 automation could not assign — including single-group supertracks, left NaN
 above — need this human pass, and so, as @fig-corrected shows, do some of the
@@ -726,24 +741,24 @@ a first pass. Where candidate tracks overlap, or a group's start and end
 ranges are ambiguous, the minimum-mismatch choice can land on the wrong
 hypothesis; this is obvious in the January track of @fig-selection. Those
 mistakes must be corrected by analyst input. @fig-corrected compares the
-automated and analyst-corrected selections from the original MATLAB run of
-this workflow (shipped as `data/fin_whale/B20_grouped_ranges.csv` and
-`B20_grouped_ranges_corrected.csv`):
+automated first pass with the analyst-corrected assignment for this same B20
+demonstration track — both from the same CORTADO_TEST selection, so the
+grey first pass here is exactly the selection of @fig-selection. The corrected
+table is shipped pre-generated (`data/fin_whale/B20_grouped_ranges_CORTADO_TEST_corrected.csv`);
+it applies the published analyst decisions (@hilmo2025) to this demonstration
+track rather than reproducing the published ranges:
 
 ```{python}
 #| label: corrected-ranges
-#| code-summary: "Load the MATLAB workflow's automated and analyst-corrected selections for B20"
-def load_grouped(name):
-    df = pd.read_csv(data("data", "fin_whale", name))
-    df["time"] = pd.to_datetime(
-        df["time"], format="%d-%b-%Y %H:%M:%S").dt.tz_localize("UTC")
-    df["use_track"] = df["use_track"] == 1
-    return df
-
-matlab_auto = load_grouped("B20_grouped_ranges.csv")
-matlab_corr = load_grouped("B20_grouped_ranges_corrected.csv")
-first_pass = matlab_auto[matlab_auto["use_track"]]
-reviewed = matlab_corr[matlab_corr["use_track"]]
+#| code-summary: "Load the automated and analyst-corrected B20 selections (CORTADO_TEST)"
+auto_grouped = pd.read_csv(
+    data("data", "fin_whale", "B20_grouped_ranges_CORTADO_TEST.csv"),
+    parse_dates=["time"])
+corr_grouped = pd.read_csv(
+    data("data", "fin_whale", "B20_grouped_ranges_CORTADO_TEST_corrected.csv"),
+    parse_dates=["time"])
+first_pass = auto_grouped[auto_grouped["use_track"]]
+reviewed = corr_grouped[corr_grouped["use_track"]]
 print(f"automated first pass: {len(first_pass)} rows in tracks; "
       f"after analyst review: {len(reviewed)}")
 print("hypotheses before:", first_pass["best_hypothesis"]
@@ -754,7 +769,7 @@ print("hypotheses after: ", reviewed["best_hypothesis"]
 
 ```{python}
 #| label: fig-corrected
-#| fig-cap: "Analyst correction of the automated selection at B20, from the original MATLAB run of this workflow (full deployment; Hilmo et al. 2025). Grey open circles: the automated first pass, plotted at the range of its selected hypothesis. Colour: the analyst-corrected assignment — MP1−Direct (orange circles), MP2−MP1 (purple diamonds), MP3−MP2 (blue ×). Top: in the March close approach the review confirms the automated V (the coloured points sit inside the grey circles). Bottom: in the January window the automation's mistakes are plain — the analyst reassigned much of the track between MP1−Direct and MP2−MP1, moving those ranges onto the other hypothesis curve, removed the spurious MP3−MP2 assignments, and rejected some groups outright (grey circles with no coloured partner)."
+#| fig-cap: "Analyst correction of the automated selection at B20 (CORTADO_TEST demonstration data; the corrected assignment applies the published analyst decisions of Hilmo et al. 2025 to this track). Grey open circles: the automated first pass, plotted at the range of its selected hypothesis. Colour: the analyst-corrected assignment — MP1−Direct (orange circles), MP2−MP1 (purple diamonds), MP3−MP2 (blue ×). Top: in the March close approach the review confirms the automated V (the coloured points sit inside the grey circles). Bottom: in the January window the analyst reassigned much of the track between MP1−Direct and MP2−MP1, moving those ranges onto the other hypothesis curve, and rejected some groups outright (grey circles with no coloured partner)."
 #| code-fold: true
 auto_sel = selected_range(first_pass)
 corr_sel = selected_range(reviewed)
@@ -796,19 +811,21 @@ however, counts individual **calls**, so the final step goes back to the
 detection file (@sec-autocorr), which holds every single detected call with its
 peak time. For each corrected track, the selected range is **linearly
 interpolated against time onto the peak time of every call** that falls within
-the track's span (`interpolate_call_ranges()`, the port of
-`interpolate_for_call_ranges_marianas.m`). The result is an estimated range —
+the track's span (`interpolate_call_ranges()`). The result is an estimated range —
 `interp_range` — **for each detected call on a track**; calls outside any
 corrected track (noise detections, rejected or unassigned groups) receive none.
 This per-call range table is what the distance-sampling density estimation
-consumes (@sec-distance_sampling).
+consumes. It is computed here from the B20
+demonstration data to show the final step; in the real analysis the density
+estimation is fed the **total interpolated call ranges pooled across stations**,
+not the per-station detection, grouped, and corrected tables that produced them.
 
 ```{python}
 #| label: call-interpolation
 #| code-summary: "Interpolate the corrected track ranges onto every detected call"
 from whaletracks.detection.hypothesis_selection import interpolate_call_ranges
 
-calls_ranged, _ = interpolate_call_ranges(matlab_corr, calls)
+calls_ranged, _ = interpolate_call_ranges(corr_grouped, calls)
 n_ranged = calls_ranged["interp_range"].notna().sum()
 print(f"{len(calls_ranged)} detected calls in the B20 detection file; "
       f"{n_ranged} lie on a corrected track and receive an estimated range")
@@ -883,23 +900,17 @@ the method can be trusted:
 Run parameters for each command live in `whaletracks/config/*.yaml`; see the
 package `README.md` for setup and usage.
 
-## Exercises {#sec-mp_exercises}
-
-1\. Load the B01 BELLHOP table
-(`data/bellhop_arrival_models/Marianas_ray_B01_bellhop_arrivals.csv`) and compare
-its MP1−Direct spacing curve with B20's from @sec-forward_model. How does the
-shallower station (5321 m vs 5563 m) shift the curve?
-
-2\. In @sec-invert_demo, what range does a 3.0 s MP1−Direct spacing imply for B20
-under the BELLHOP table versus the straight-ray helper of @sec-search_window? Why
-do they differ, and why does only the BELLHOP answer count?
-
-3\. In the synthetic demo (@sec-autocorr), lower the echo amplitudes or raise the
-noise level until the autocorrelation peak is no longer recoverable. What
-signal-to-noise ratio is the practical limit?
-
 ## Background and further reading {#sec-mp_reading}
 
+- The method used here builds directly on two pioneering studies of
+  single-sensor whale ranging. @weirathmueller2017 first ranged to vocalizing
+  fin whales from the **timing and amplitude of multipath arrivals** recorded on
+  individual seafloor seismometers — detecting calls and identifying multipaths
+  with a matched filter, and predicting multipath times and relative amplitudes
+  as a function of range by ray tracing — the direct forerunner of the method in
+  @hilmo2024. @harris2013 pioneered applying **distance sampling** to fin whale
+  calls recorded by single seismic instruments (northeast Atlantic), the
+  foundational step toward the call-density application in @hilmo2025.
 - The multipath ranging method — forward model, detection template, and the
   autocorrelation-based delay measurement — is developed in full by
   @hilmo2024, which applies it to fin whales at Marianas, Hawaii, Alaska, and
@@ -909,8 +920,8 @@ signal-to-noise ratio is the practical limit?
 - The analytic multipath geometry and the autocorrelation step are also
   documented inline in `basic_ranging_model.py` and `detect_calls.py`.
 - BELLHOP ray tracing: @porter_bellhop.
-- Passive acoustic density estimation from ranges: see @sec-distance_sampling
-  in this document.
+- Passive acoustic density estimation from single-sensor ranges: @harris2013;
+  @hilmo2025.
 
 ## References {#sec-mp_references}
 
