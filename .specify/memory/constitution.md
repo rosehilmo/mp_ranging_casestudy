@@ -1,35 +1,36 @@
 *AI-generated draft (Claude, Anthropic) — for review. All parameters and figures are derived from version-controlled scripts and data.*
 
-# Marianas Multipath Whale Ranging — Refactor Constitution
+# Marianas Multipath Whale Ranging — Research Constitution
 
 ## Research Context
 
-This repository is a **publication-readiness refactor** of cloned research code
-(`github.com/rosehilmo/mp_ranging_casestudy`) that detects **fin whale
-(*Balaenoptera physalus*)** and **Bryde's whale (*Balaenoptera edeni*)** calls in
+This repository provides a **Python implementation** of a method that detects
+**fin whale (*Balaenoptera physalus*)** calls — and, via configuration, other
+baleen-whale calls such as **Bryde's whale (*Balaenoptera edeni*)** — in
 **ocean-bottom seismometer (OBS)** records from the **Marianas** region and
 estimates whale-to-station **range** from the timing of **multipath acoustic
-arrivals**. The fin-whale method is the published one of Hilmo & Wilcock (2024,
-JASA) and Hilmo, Harris & Wilcock (2025, *Endangered Species Research*).
+arrivals**. The method is the published one of Hilmo & Wilcock (2024, JASA) and
+Hilmo, Harris & Wilcock (2025, *Endangered Species Research*), building on
+Weirathmueller, Wilcock & Hilmo (2017, JASA).
 
-**Primary goal:** modernize the original scripts to **reproducible,
-installable, config-driven, documented, and tested** form — one language segment
-at a time — **without changing the scientific results.** The deliverable is code
-and teaching material other researchers can clone, run, and adapt.
+**Primary goal:** a reproducible, installable, config-driven, documented, and
+tested Python package (`whaletracks`) plus teaching material that other
+researchers can clone, run, and **adapt to their own data**. A single-station
+fin-whale **demonstration** (station B20) is shipped as the worked example.
 
-**Scope decision — refactor, not re-analysis.** This is an engineering effort,
-not a new scientific study. Numeric outputs are **preserved exactly**; the
-existing case-study results stand. Rigor concentrates on reproducibility,
-provenance, and correctness of the *port*; new science (new stations, retuned
-detectors, new density estimates) is explicitly out of scope.
+**Scope decision — demonstration, not re-analysis.** This repository
+demonstrates the ranging method end to end on one station; it is **not** a
+reproduction of the published multi-station analysis, and the shipped B20
+`CORTADO_TEST` data do **not** reproduce the paper's ranges or densities. Rigour
+concentrates on reproducibility, provenance, correctness of the ranging
+pipeline, and adaptability.
 
-**Segments, in order.** (1) **Python** — repackage into an installable
-`whaletracks` package + Quarto tutorial (package done; tutorial in progress). (2)
-**MATLAB → Python** (`MATLABCodes/`) — **convert** the MATLAB process to Python,
-not preserve it as MATLAB (PI decision, 2026-09-25); the port must reproduce the
-MATLAB outputs. (3) **R** (`Brydes_DE.R`) — refactor or port, TBD. Each segment
-is handled under the same preserve-exactly (of outputs) discipline before the
-next begins.
+**Pipeline — Python only.** The entire ranging process — detection,
+autocorrelation of the detection score, range estimation, semi-automated
+hypothesis selection, and per-call interpolation — is implemented in Python
+(`whaletracks`), with a Quarto tutorial. Density estimation is downstream of
+ranging and **out of scope** here; the pipeline's final product is the per-call
+interpolated range table that a density analysis would consume.
 
 **Intended users:** The PI's own research group and readers of the case-study
 tutorial (students and collaborators).
@@ -83,15 +84,15 @@ The repo clones and runs on a new machine from a short documented sequence
 magic numbers. READMEs document each command's purpose, inputs, outputs, and
 editable parameters.
 
-### VII. Behaviour-Preserving Refactor (project-specific)
+### VII. Verified, Documented Behaviour (project-specific)
 
-The refactor **must not change algorithm logic or numeric outputs.** Suspected
-correctness bugs are **documented in `KNOWN_ISSUES.md`, never silently fixed.**
-**Golden-master tests** pin the numeric outputs of the library core (captured
-from the legacy code); `test_plot_ranges.py` proves BELLHOP-mode ranges match
-the committed `Marianas_auto_B01_v2.csv` byte-for-byte. Any intended behavioural
-change (e.g. dropping the unpublished T-phase discriminator, fin-vs-Bryde's
-threshold variations) is documented as a deliberate, reviewed deviation.
+**Golden-master tests** pin the numeric outputs of the library core against
+captured reference values (`tests/golden/`); `test_plot_ranges_fin.py` locks the
+BELLHOP-mode fin B20 (CORTADO_TEST) ranging output against the committed
+`Marianas_auto_B20_CORTADO_TEST_v2.csv`. Known quirks and deliberate design
+choices (e.g. the published ranging gate, the omission of an unpublished
+T-phase discriminator) are **documented in `KNOWN_ISSUES.md`**, not left
+implicit.
 
 ## Data Sources
 
@@ -112,10 +113,12 @@ threshold variations) is documented as a deliberate, reviewed deviation.
   `PythonCodes/data/bellhop_arrival_models/` (`interp_r/d/mp1/mp2/mp3`, 0–40 km),
   provided with the repo, computed for the site profiles/geometry of Hilmo &
   Wilcock (2024). **These produce the final ranges.**
-- **Detection / verified-call CSVs**: shipped per species under
-  `data/{fin_whale,brydes_whale}/` (`{station}_mp.csv`, autocorrelation
-  intermediates, `Marianas_auto_{station}_v2.csv` range outputs, Bryde's
-  long-call year picks and `All_Brydes_verified.csv`).
+- **Detection / range CSVs**: the shipped demonstration set is for fin station
+  **B20** under `data/fin_whale/` — `B20_mp_CORTADO_TEST.csv` (detections),
+  `auto_B20_mp_CORTADO_TEST.csv` (autocorrelation),
+  `Marianas_auto_B20_CORTADO_TEST_v2.csv` (ranges), and the grouped +
+  analyst-corrected track tables. The Bryde's configs are retained as an
+  adaptation example; Bryde's data is not shipped.
 - **Source — whale calls**: **fin** 20-Hz call, detected with a synthetic
   down-swept template ≈22→15 Hz over ~0.8 s (kernel in `detect_fin.yaml`);
   **Bryde's** ~37→33 Hz variant (`detect_brydes.yaml`). Multipath spacing is
@@ -127,9 +130,7 @@ threshold variations) is documented as a deliberate, reviewed deviation.
 
 ## Technical Environment
 
-- Language: **Python 3.12** — the primary segment and the target for the MATLAB
-  conversion (the process moves off MATLAB entirely). The **R** segment stays R
-  unless a port is later agreed.
+- Language: **Python 3.12** — the entire ranging pipeline.
 - Environment management: **conda** — `PythonCodes/environment.yml` (env
   `mp_ranging_casestudy`), with an editable install of the local `whaletracks`
   package via `pip: -e .`. **This is a deliberate deviation from the lab-default
@@ -146,9 +147,8 @@ threshold variations) is documented as a deliberate, reviewed deviation.
 - Compute: JupyterHub container on this host (CPU-capped ~32 cores; parallel jobs
   **≤ 24 workers** per lab policy). GUI/network CLIs require a display + IRIS
   access and are not run headless.
-- Version control: git. Working branch `modernize-python-segment` (not yet
-  merged/pushed). `Sample documentation_NEAREST/`, `literature/`, and Quarto
-  render artifacts are gitignored.
+- Version control: git. `Sample documentation_NEAREST/`, `literature/`, and
+  Quarto render artifacts are gitignored.
 
 ## Coordinate Systems & Units
 
@@ -183,8 +183,8 @@ threshold variations) is documented as a deliberate, reviewed deviation.
 ## Quality Checks
 
 - **Golden-master**: numeric outputs of the library core re-checked against
-  values captured from the legacy code; B01 BELLHOP-mode ranges byte-identical to
-  `Marianas_auto_B01_v2.csv`.
+  captured reference values; fin B20 (CORTADO_TEST) BELLHOP-mode ranges locked
+  to `Marianas_auto_B20_CORTADO_TEST_v2.csv`.
 - **Lint / tests**: `ruff` clean; `MPLBACKEND=Agg python -m pytest -q` green
   before any commit (lab rule). GUI/network CLIs covered by import / `--help` /
   config-parse smoke tests only.
@@ -202,9 +202,9 @@ threshold variations) is documented as a deliberate, reviewed deviation.
   public FDSN; confirm data-center acknowledgement requirements before external
   sharing. Do not publish the whale-call ROC / embargoed products from sibling
   projects here.
-- **Deliverables:** (1) installable `whaletracks` Python package + golden-master
-  tests; (2) fin-whale Quarto tutorial matching the `Sample
-  documentation_NEAREST/` house style; (3) refactored MATLAB and R segments.
+- **Deliverables:** (1) installable `whaletracks` Python package + tests;
+  (2) fin-whale Quarto tutorial (B20 demonstration) matching the `Sample
+  documentation_NEAREST/` house style.
 - **Ethical standard:** run the lab's `ethical-check` before introducing new
   literature/data, producing human-facing prose, regenerating a
   published-looking figure, or sharing outputs externally. Method parameters and
