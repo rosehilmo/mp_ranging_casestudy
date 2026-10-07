@@ -17,6 +17,24 @@ Method and engineering decisions, with rationale. Back-filled from the refactor.
   `environment_1.yml` and an unused `uv.lock` were removed so there is one
   deterministic environment definition.
 - **Species scope = fin + Bryde's** (not blue). Both were studied on these OBS.
+  After the 2026-10-05 trim only the Bryde's *configs* remain (as adaptation
+  examples); the Bryde's data are no longer shipped.
+- **Python-only demonstration (2026-10-05).** The repository ships one
+  single-station worked example (B20 fin whale, `CORTADO_TEST`) rather than the
+  published multi-station analysis. `MATLABCodes/`, the R density scripts, the
+  Bryde's data, and all non-B20 fin data were removed. Rationale: the PI wants an
+  adaptable, easily-implementable Python demonstration for other researchers,
+  shipping the bare minimum data needed to run the code and the tutorial.
+  Consequences: the whole ranging process (detection → autocorrelation → range
+  estimation → hypothesis selection → per-call interpolation) is Python;
+  density estimation is explicitly out of scope; the Bryde's B01 golden test and
+  the MATLAB-reference golden for the selection port were dropped with their
+  inputs. The pre-trim state is preserved at tag `full-dataset-pre-cleanup`, and
+  **git history was deliberately not purged** (PI decision) — a fresh clone's
+  working tree is minimal, but `git log` still contains the removed files.
+- **Destructive-change procedure (PI-endorsed).** Branch, tag the pre-change
+  state as a restore point, drive deletion from a real dependency scan, and
+  verify with `pytest` + `quarto render` before committing.
 
 ## Method decisions
 
@@ -52,7 +70,8 @@ Method and engineering decisions, with rationale. Back-filled from the refactor.
   `estimate_ranges_from_timings`) shared by the `plot_ranges` CLI and the
   tutorial; verified byte-identical to the pre-factor CLI output at the time
   for fin B19 and Bryde's B01. **B20 is the worked/tested fin station
-  everywhere (PI, 2026-09-29)**; B19 files remain shipped as legacy only.
+  everywhere (PI, 2026-09-29)**; the B19 and Bryde's files were removed in the
+  2026-10-05 trim.
 - **Tutorial worked example = station B20, CORTADO_TEST dataset** (PI,
   2026-09-28), replacing B19. Optional tz-safe `valid_start`/`valid_end` bounds
   were added to the ranging step; B20 uses `valid_end = 2013-02-01` to exclude
@@ -73,7 +92,9 @@ Method and engineering decisions, with rationale. Back-filled from the refactor.
   `Marianas_auto_{station}_v2.csv` (matches the published code).
 - **Data reorganized by species** under `data/{fin_whale,brydes_whale}` with a
   shared `bellhop_arrival_models/`. Orphan `All_Brydes_verified.csv` moved from
-  the `PythonCodes/` root into `data/brydes_whale/`.
+  the `PythonCodes/` root into `data/brydes_whale/`. *(Since the 2026-10-05 trim
+  only `data/fin_whale/` — the B20 `CORTADO_TEST` set — the station table, and
+  the BELLHOP tables are shipped.)*
 
 ## Documentation decisions
 

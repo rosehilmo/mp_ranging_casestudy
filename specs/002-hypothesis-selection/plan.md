@@ -4,7 +4,8 @@
 
 **Spec**: `specs/002-hypothesis-selection/spec.md`
 **Created**: 2026-09-29
-**Status**: In progress
+**Status**: Complete (2026-10-05) — merged to `main`; the MATLAB golden-master
+was dropped with `MATLABCodes/` in the Python-only trim
 
 ## Approach
 
@@ -27,16 +28,16 @@ same operational shape as the MATLAB original.
 ```text
 whaletracks/detection/hypothesis_selection.py   # pure functions:
     filter_ranges()        # step 1 (25-km / >=1-call / 40-km-saturation filter)
-    group_ranges()         # step 2 (1.6 km / 1 h walk)
+    group_ranges()         # step 2 (1.5 km / 1 h walk; Bryde's config 1.6 km)
     qualify_groups()       # step 3 (use_track)
-    build_supertracks()    # step 4 (2 h gap + >18 midpoint split)
+    build_supertracks()    # step 4 (3 h gap + >18 midpoint split; Bryde's 2 h)
     assign_hypotheses()    # step 5 (3^n enumeration, RMS junction cost)
     select_hypotheses()    # steps 1-5 composed -> full table + 4 new columns
     interpolate_call_ranges()  # step 7 (per-supertrack interp onto peak_time)
 whaletracks/config/select_fin.yaml              # fin thresholds (>11 / >10)
 whaletracks/config/select_brydes.yaml           # Bryde's thresholds (>6 / >2)
 whaletracks/cli/select_hypotheses.py            # whaletracks-select CLI
-tests/test_hypothesis_selection.py              # synthetic + golden (skipif)
+tests/test_hypothesis_selection.py              # structural tests (Python implementation)
 tutorial section after #sec-results             # B20 worked example
 ```
 
@@ -47,16 +48,16 @@ tutorial section after #sec-results             # B20 worked example
 - [x] Config versioned: all thresholds in `select_{species}.yaml`
 - [x] Figure standards: tutorial figure Okabe–Ito, static PNG
 - [x] Quality checks: pytest + ruff + quarto render before commit
-- [ ] Golden-master: **pending PI's MATLAB reference run** — until then the
-      port is verified by synthetic structural tests only (documented gap)
+- [~] Golden-master: **dropped** with `MATLABCodes/` (PI, 2026-10-05) — the port
+      is verified by structural tests plus the line-by-line algorithm
+      confirmation; the numeric MATLAB comparison is a documented gap
 
 ## Open Questions
 
-- [ ] Golden reference: PI to run `clean_group_ranges.m` on the repo's B20
-      CORTADO_TEST input and commit the automated output (B20 everywhere per
-      PI 2026-09-29; memory caveat in the spec).
-- [ ] Disposition of the two Bryde's figure scripts (histograms, monthly
-      density) — port later or fold into the R/density segment?
-- [ ] The MATLAB fin filter keeps `sum_calls >= 1`; with feature 001's new
-      2/10 ranging gate the B20 input is already gated — confirm thresholds
-      still make sense for B20 (they only tighten, so the port keeps them).
+- [x] ~~Golden reference run in MATLAB~~ — no longer planned; the repository is
+      Python-only (PI, 2026-10-05).
+- [x] ~~Disposition of the two Bryde's figure scripts~~ — retired with
+      `MATLABCodes/`; density work is out of scope for this demonstration.
+- [x] The MATLAB fin filter keeps `sum_calls >= 1`; with feature 001's 2/10
+      ranging gate the B20 input is already gated — the thresholds only tighten,
+      so the port keeps them.

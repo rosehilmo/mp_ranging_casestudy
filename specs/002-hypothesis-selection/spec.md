@@ -3,8 +3,11 @@
 # Specification: Port the semi-automated multipath hypothesis selection to Python
 
 **Feature**: `002-hypothesis-selection`
-**Status**: In progress — MATLAB source supplied 2026-09-29; **golden reference
-outputs still needed** (see Data Description)
+**Status**: **Complete** (2026-10-05) — port, CLI, tests, and tutorial section
+shipped and merged to `main`. The planned MATLAB golden-master was **dropped**
+with `MATLABCodes/` in the Python-only trim; the port is verified by structural
+tests against the Python implementation instead (documented gap — see Validation
+Approach).
 **Created**: 2026-09-29
 **Depends on**: `001-publication-refactor` (the `whaletracks` package and its
 raw ranging output are this feature's input)
@@ -81,83 +84,94 @@ the feature-001 `RANGE_COLUMNS` order.
 
 ## Data Description
 
-### Required from the PI (remaining blocker)
+### MATLAB golden reference — dropped (PI, 2026-10-05)
 
-- ~~The MATLAB source~~ — **supplied 2026-09-29** (`clean_group_ranges.m`,
-  `clean_group_ranges_Brydes.m`, `interpolate_for_call_ranges_marianas.m`).
-- **A golden reference output** (PI decision 2026-09-29: **B20 everywhere,
-  not B19**): the MATLAB scripts' `writetable` lines are commented out and no
-  `*_grouped_ranges*.csv` is in the repo. For the golden-master test the PI
-  should run `clean_group_ranges.m` once in MATLAB (≥ R2023a, for
-  `combinations`) with its `readtable` pointed at the repo's
-  `data/fin_whale/Marianas_auto_B20_CORTADO_TEST_v2.csv` and the line-354
-  `writetable` uncommented, and provide the **automated** output (before the
-  interactive loop) as
-  `data/fin_whale/B20_grouped_ranges_CORTADO_TEST_matlab.csv`. The
-  manually-corrected variant cannot serve as a deterministic golden. Caveat:
-  the B20 data contains a 17-group supertrack (3^17 combinations) — MATLAB
-  may exhaust memory there (see KNOWN_ISSUES); if so, a station/subset the
-  MATLAB can complete is an acceptable golden and the PI should say which.
+- ~~The MATLAB source~~ — supplied 2026-09-29 (`clean_group_ranges.m`,
+  `clean_group_ranges_Brydes.m`, `interpolate_for_call_ranges_marianas.m`), used
+  to confirm the algorithm line by line, then **removed with `MATLABCodes/`** in
+  the Python-only trim (recoverable from tag `full-dataset-pre-cleanup`).
+- ~~A golden reference output~~ — the planned MATLAB-vs-Python golden-master was
+  **not produced and is no longer planned**: the repository is Python-only, so a
+  MATLAB reference run is no longer part of its reproducibility story. (The run
+  was also at risk of exhausting MATLAB's memory on B20's 17-group supertrack —
+  3^17 combinations — which the Python port streams in chunks.) The port's
+  fidelity to the MATLAB therefore rests on the line-by-line algorithm
+  confirmation (T102) plus structural tests, **not** on a numeric comparison.
+  This gap is recorded here (the user-facing `KNOWN_ISSUES.md` documents the
+  Python implementation's behaviour on its own terms, with no MATLAB framing).
 
-### Already in the repo
+### Shipped in the repo
 
-- Raw ranging output (feature 001): `Marianas_auto_{station}_v2.csv` /
-  B20 CORTADO_TEST — the selection's input format (`time`, `range_D_MP1`,
-  `range_MP1_MP2`, `range_MP2_MP3`, `auto_max`, `auto_snr`, `auto_amp`,
-  `auto_count`, `n_calls`).
-- `MATLABCodes/` inventory (2026-09-29):
+- Raw ranging output (feature 001): `Marianas_auto_B20_CORTADO_TEST_v2.csv` —
+  the selection's input format (`time`, `range_D_MP1`, `range_MP1_MP2`,
+  `range_MP2_MP3`, `auto_max`, `auto_snr`, `auto_amp`, `auto_count`, `n_calls`).
+- Selection outputs shipped as demonstration artifacts:
+  `B20_grouped_ranges_CORTADO_TEST.csv` (automated) and
+  `..._corrected.csv` (analyst-corrected companion; see `KNOWN_ISSUES.md`,
+  "Demonstration data provenance").
+- `MATLABCodes/` inventory (2026-09-29) — **all four scripts removed 2026-10-05**
+  as downstream of ranging and out of scope; none implemented the selection:
   - `MultipathSearch.m` — scatter plot of grouped ranges filtered on
-    `use_track == 1` (downstream viewer; input CSV not in repo).
+    `use_track == 1` (downstream viewer; input CSV was not in the repo).
   - `make_station_histograms.m` — Bryde's per-station/per-month range
-    histograms from `All_call_ranges_interp_Brydes.csv` (present, 14 MB).
+    histograms from `All_call_ranges_interp_Brydes.csv`.
   - `make_montly_density_fig_Brydes.m` — Bryde's monthly density + 95% CI
     figure (distance-sampling arithmetic; hardcoded `w`, `Pdet`, `cfd`;
     `n = []` placeholder marked "change").
-  - `pathdef.m` — MATLAB path file, no science; exclude from the port.
+  - `pathdef.m` — MATLAB path file, no science.
 
 ## Expected Outputs
 
-- `whaletracks/detection/hypothesis_selection.py` (pure functions) + CLI
-  (`whaletracks-select-hypotheses` or similar), config-driven (YAML with the
+- `whaletracks/detection/hypothesis_selection.py` (pure functions) + the
+  `whaletracks-select` CLI, config-driven (YAML with the
   grouping/linking/assignment thresholds — Principle IV).
-- Golden-master test pinning the MATLAB reference output.
+- ~~Golden-master test pinning the MATLAB reference output~~ — dropped
+  (see Data Description); structural tests of the Python implementation instead.
 - Tutorial section after `#sec-results` running the selection on B20 live,
-  with a colourblind-safe before/after figure (constitution Figure Standards).
-- `KNOWN_ISSUES.md` entries for any deliberate deviation from the MATLAB.
-- Disposition of the three plotting/density scripts (likely: port the two
-  Bryde's figure scripts as small utilities or defer them to the R/density
-  segment — decide with PI; they are *not* the selection algorithm).
+  with colourblind-safe figures (constitution Figure Standards).
+- `KNOWN_ISSUES.md` entries for the implementation's notable behaviours and for
+  the provenance of the shipped demonstration tables.
+- Disposition of the three plotting/density scripts — **retired** with
+  `MATLABCodes/` on 2026-10-05; they are downstream of ranging, not part of the
+  selection.
 
 ## Validation Approach
 
-- Golden-master: Python output matches the MATLAB reference output on the
-  reference input (byte-identical where types allow; documented tolerance
-  otherwise).
+- **Structural tests** of the Python implementation (grouping walk,
+  qualification thresholds, noise/out-of-scope exclusion, the single-group
+  unassigned case, interpolation, config parse).
+- ~~Golden-master against a MATLAB reference run~~ — **not performed**; the
+  known verification gap for this feature (see Data Description).
 - `MPLBACKEND=Agg python -m pytest -q` green; `ruff` clean; `quarto render`
   clean — before every commit.
 - Tutorial section renders against shipped data offline.
 
 ## Completion Criteria
 
-- [ ] MATLAB selection source + reference input/output pair supplied by PI
-- [ ] Algorithm parameters confirmed against the source (grouping distance,
-      time proximity, track criteria, RMS assignment)
-- [ ] Python port in `whaletracks` with config + CLI; ruff clean
-- [ ] Golden-master test green against the MATLAB reference output
-- [ ] Tutorial section added after `#sec-results` (B20 worked example)
-- [ ] `MATLABCodes/` scripts dispositioned; dir archived or retired per plan
-- [ ] Specs/tasks/constitution kept in sync (Spec Kit discipline)
+- [x] MATLAB selection source supplied by the PI (2026-09-29)
+- [x] Algorithm parameters confirmed against the source (grouping distance,
+      time proximity, track criteria, RMS assignment) and reconciled with the
+      published values (1.5 km / 3 h — `KNOWN_ISSUES.md` #6)
+- [x] Python port in `whaletracks` with config + CLI; ruff clean
+- [~] ~~Golden-master test against a MATLAB reference output~~ — **dropped with
+      `MATLABCodes/`** (PI, 2026-10-05); verification rests on the line-by-line
+      algorithm confirmation plus structural tests
+- [x] Tutorial section added after `#sec-results` (B20 worked example)
+- [x] `MATLABCodes/` scripts dispositioned — retired in the Python-only trim
+- [x] Specs/tasks/constitution kept in sync (Spec Kit discipline)
 
 ## Assumptions & Limitations
 
 - The port reproduces the *automated* selection; the manual analyst
   verification (spectrogram inspection, accept/reject) remains a human step —
   the port must preserve the columns/flags that step consumes and produces.
-- Exact thresholds quoted in the paper (e.g. grouping distance, <12 ranges,
-  >3 h) are taken from the MATLAB source, not from the paper text, wherever
-  they differ.
-- The tutorial addition is fin/B20; the Bryde's CSVs in `MATLABCodes/` serve
-  the separate figure scripts, not the tutorial thread.
+- Where the MATLAB source and the paper disagreed on thresholds, the **published
+  values win** for the fin production config (1.5 km grouping, < 3 h track
+  linking — `KNOWN_ISSUES.md` #6); the Bryde's config keeps the MATLAB values.
+- The tutorial addition is fin/B20. The shipped analyst-corrected table is a
+  demonstration artifact derived from the published review decisions, not a
+  fresh review of the CORTADO data (`KNOWN_ISSUES.md`, "Demonstration data
+  provenance").
 
 ## Notes
 
@@ -165,6 +179,7 @@ Feature 001's Phase 6 (T028–T032, generic "convert MATLAB to Python") is
 superseded by this spec, which narrows scope to the hypothesis-selection
 process per PI direction (2026-09-29) after the inventory (T028) showed
 `MATLABCodes/` contains only downstream plotting/density scripts. This
-feature lives on branch `modernize-python-segment` alongside 001 (deliberate
-deviation from branch-per-feature, matching how 001 was retrofitted; the
-branch is still unmerged pending T026).
+feature was developed on branch `modernize-python-segment` alongside 001
+(deliberate deviation from branch-per-feature, matching how 001 was
+retrofitted); that branch was merged to `main` and pushed on 2026-10-05, and
+`MATLABCodes/` was removed in the same Python-only trim.

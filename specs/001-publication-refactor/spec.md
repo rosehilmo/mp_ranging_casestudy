@@ -3,16 +3,17 @@
 # Specification: Publication-readiness refactor of the Marianas multipath ranging case study
 
 **Feature**: `001-publication-refactor`
-**Status**: Python segment complete; MATLAB & R segments pending
+**Status**: Python segment complete and merged to `main`; repository trimmed to a
+Python-only B20 demonstration (2026-10-05) — the MATLAB and R segments are out of
+scope
 **Created**: 2026-09-25 (back-filled from the in-progress refactor)
 
 ## Objectives
 
 Transform cloned research code (`mp_ranging_casestudy`) into reproducible,
 installable, config-driven, documented, and tested form **without changing the
-scientific results**, one language segment at a time (Python → MATLAB → R). The
-outcome is code and a teaching tutorial that other researchers can clone, run,
-and adapt.
+scientific results**. The outcome is code and a teaching tutorial that other
+researchers can clone, run, and adapt.
 
 Concretely:
 
@@ -24,8 +25,20 @@ Concretely:
    numeric outputs exactly.
 4. Provide a **Quarto tutorial** teaching the fin-whale multipath method in the
    lab's documentation house style.
-5. **Convert the MATLAB process to Python** (port reproducing MATLAB outputs),
-   then refactor the **R** segment under the same discipline.
+5. Implement the **whole ranging process in Python** — detection,
+   autocorrelation, range estimation, semi-automated hypothesis selection
+   (feature 002), and per-call interpolation.
+
+**Scope change (PI, 2026-10-05) — Python-only demonstration.** The repository is
+a single-station (B20 fin-whale) *demonstration* of the ranging method, not a
+reproduction of the published multi-station analysis. `MATLABCodes/`, the R
+density scripts, and all data beyond the B20 `CORTADO_TEST` demonstration set
+were removed from the working tree (restore tag `full-dataset-pre-cleanup`; git
+history deliberately not purged). Density estimation is downstream of ranging and
+out of scope. The former objective "convert the MATLAB process to Python, then
+refactor R" is superseded: the one MATLAB process that mattered — hypothesis
+selection — was ported under feature 002, and the remaining MATLAB/R scripts were
+retired rather than ported.
 
 ## Data Description
 
@@ -37,14 +50,21 @@ Concretely:
 - **BELLHOP arrival tables** — `data/bellhop_arrival_models/Marianas_ray_{station}_bellhop_arrivals.csv`:
   ray-traced direct + MP1/MP2/MP3 travel times vs range (0–40 km). Source of the
   **final ranges**.
-- **Detection / range CSVs** — `data/{fin_whale,brydes_whale}/`: shipped
-  detections (`{station}_mp.csv`), autocorrelation intermediates, and range
-  outputs (`Marianas_auto_{station}_v2.csv`), plus Bryde's long-call year picks
-  and `All_Brydes_verified.csv`. Fin autocorrelation intermediates are shipped
-  for **B19** and **B20**; the tutorial's worked example uses the B20
-  `*_CORTADO_TEST` files with `valid_end = 2013-02-01` excluding the Feb 2013+
-  airgun survey (7105 ranged windows, Mar 2012 – Jan 2013, under the published
-  ≥2/≥10 fin ranging gate).
+- **Detection / range CSVs** — `data/fin_whale/`: the B20 `CORTADO_TEST`
+  demonstration set only (detections `B20_mp_CORTADO_TEST.csv`, autocorrelation
+  intermediate `auto_B20_mp_CORTADO_TEST.csv`, ranging output
+  `Marianas_auto_B20_CORTADO_TEST_v2.csv`, and the automated and
+  analyst-corrected hypothesis-selection tables
+  `B20_grouped_ranges_CORTADO_TEST{,_corrected}.csv`). Ranging uses
+  `valid_end = 2013-02-01` to exclude the Feb 2013+ airgun survey (7105 ranged
+  windows, Mar 2012 – Jan 2013, under the published ≥2/≥10 fin ranging gate).
+  These data **do not reproduce the published ranges or densities** — they exist
+  to run the pipeline and tutorial end to end (see `KNOWN_ISSUES.md`,
+  "Demonstration data provenance").
+- **Removed 2026-10-05** (Python-only demonstration trim): all Bryde's data, all
+  non-B20 / full-deployment fin data, and the B19 legacy outputs. The Bryde's
+  *configs* (`detect_brydes.yaml`, `ranges_brydes.yaml`, `select_brydes.yaml`)
+  are retained as worked adaptation examples for a second call type.
 
 ### Secondary Data
 
@@ -65,7 +85,8 @@ The multipath ranging method (see the tutorial and Hilmo & Wilcock 2024):
    bends rays away from the seafloor, so which paths reach the OBS depends on
    range.
 2. **Detection** — 2-D spectrogram cross-correlation with a synthetic down-swept
-   template (fin ≈22→15 Hz; Bryde's ≈37→33 Hz) yields a detection score.
+   template (fin 20→15 Hz, 0.8 s, per Hilmo & Wilcock 2024 Table I; Bryde's
+   ≈37→33 Hz) yields a detection score.
 3. **Delay measurement** — autocorrelation of the detection score over a ~20-min
    window; peaks give the multipath delays.
 4. **Ranging** — match each measured delay against the **BELLHOP** travel-time
@@ -77,6 +98,11 @@ The multipath ranging method (see the tutorial and Hilmo & Wilcock 2024):
    ≥ 10 in the surrounding 20-min window; the offline Bryde's gate is the
    legacy centre ≥ 1. The analytic straight-ray model (`basic_ranging`) is used
    **only** to set the multipath search window, not for final ranges.
+5. **Hypothesis selection and per-call interpolation** (feature 002) — group the
+   ranged windows into tracks, choose one timing hypothesis per track by minimum
+   junction cost, let an analyst correct the automated pass, then interpolate the
+   corrected track range onto every detected call's `peak_time`. The resulting
+   per-call range table is the pipeline's final product.
 
 Refactor discipline: **preserve outputs exactly**; flag suspected bugs in
 `KNOWN_ISSUES.md`; keep conda; document any deliberate behavioural deviation.
@@ -85,21 +111,25 @@ Refactor discipline: **preserve outputs exactly**; flag suspected bugs in
 
 ### Code / packages
 
-- Installable `whaletracks` package (`pyproject.toml`, editable install) with 5
+- Installable `whaletracks` package (`pyproject.toml`, editable install) with 6
   `whaletracks-*` console scripts and a cleaned, ruff-clean, import-canonical
   library core, including the factored ranging module
   `detection/range_estimation.py` (`bellhop_timings`,
-  `estimate_ranges_from_timings`).
+  `estimate_ranges_from_timings`) and `detection/hypothesis_selection.py`
+  (feature 002).
 - YAML configs: `detect_fin.yaml`, `detect_brydes.yaml`, `ranges_fin.yaml`,
-  `ranges_brydes.yaml`, `verify_calls.yaml`, `manual_picker.yaml`.
+  `ranges_brydes.yaml`, `select_fin.yaml`, `select_brydes.yaml`,
+  `verify_calls.yaml`, `manual_picker.yaml`.
 
 ### Tests
 
-- Golden-master suite in `PythonCodes/tests/` (core numeric outputs; Bryde's B01
-  BELLHOP-mode ranges byte-identical to `Marianas_auto_B01_v2.csv`; fin B20
-  CORTADO_TEST ranges with the airgun `valid_end` bound locked by
-  `test_plot_ranges_fin.py`); CLI config-parse and GUI import/`--help` smoke
-  tests.
+- Regression suite in `PythonCodes/tests/`: golden-master pins on the library
+  core's numeric outputs (`test_golden_core.py`); fin B20 CORTADO_TEST ranges
+  with the airgun `valid_end` bound locked by `test_plot_ranges_fin.py`;
+  structural tests for the hypothesis-selection port; CLI config-parse and GUI
+  import/`--help` smoke tests. **29 tests, all green.** The Bryde's B01
+  BELLHOP-mode golden test was retired with the Bryde's data in the 2026-10-05
+  trim (it is recoverable from tag `full-dataset-pre-cleanup`).
 
 ### Documentation
 
@@ -115,48 +145,53 @@ Refactor discipline: **preserve outputs exactly**; flag suspected bugs in
 
 - `MPLBACKEND=Agg python -m pytest -q` green; `ruff` clean — **before every
   commit** (lab rule).
-- Golden-master byte-identical checks for Bryde's B01 and fin B20 CORTADO_TEST
-  ranges.
+- Golden-master byte-identical check for the fin B20 CORTADO_TEST ranges.
 - `quarto render multipath_ranging.qmd` executes all cells against shipped data
-  and resolves all citations (only the book-only `@sec-distance_sampling`
-  cross-ref is expected to warn).
+  and resolves all citations and cross-references — **zero warnings** since the
+  tutorial was made self-contained (2026-10-05).
 - Import-smoke + `--help` for GUI/network CLIs (cannot run headless).
 
 ## Completion Criteria
 
-- [x] Python: installable package, 5 config-driven CLIs, golden-master tests
-      green, ruff clean.
-- [x] Species-agnostic pipeline (fin + Bryde's) via YAML; shared station table;
-      Bryde's outputs preserved byte-identical.
-- [~] Fin-whale Quarto tutorial rewritten, cited, and rendering clean —
-      **further PI-directed revisions pending; not yet signed off.**
+- [x] Python: installable package, 6 config-driven CLIs, regression tests green,
+      ruff clean.
+- [x] Species-agnostic pipeline (fin + Bryde's) via YAML; shared station table.
+      *(Bryde's byte-identical golden retired with its data in the 2026-10-05
+      trim; recoverable from tag `full-dataset-pre-cleanup`.)*
+- [~] Fin-whale Quarto tutorial rewritten, cited, and rendering clean (zero
+      warnings) — **further PI-directed revisions pending; not yet signed off.**
 - [x] Environment reduced to a single deterministic definition
       (`environment.yml`); orphan CSV relocated under `data/`; README species
       framing corrected.
-- [ ] MATLAB process **converted to Python** (port, not in-place refactor),
-      reproducing the MATLAB numeric outputs.
-- [ ] R segment (`Brydes_DE.R`) refactored (or ported — TBD with PI) under the
-      same discipline.
+- [x] Whole ranging process implemented in Python, through hypothesis selection
+      and per-call interpolation (feature 002).
+- [x] Repository trimmed to the Python-only B20 demonstration; restore tag
+      `full-dataset-pre-cleanup` created; README/constitution/KNOWN_ISSUES
+      reframed (PI, 2026-10-05).
+- [~] ~~MATLAB process converted to Python~~ / ~~R segment refactored~~ —
+      **out of scope** after the 2026-10-05 trim: the selection algorithm was
+      ported (002) and the remaining MATLAB/R scripts were retired, not ported.
 - [ ] Per-output provenance manifest (station/channel/time + config id).
-- [~] Fin autocorrelation intermediates shipped so fin `plot_ranges` is
-      reproducible offline — **B20 (CORTADO_TEST) done and test-locked; the
-      worked/tested fin station is B20 everywhere (PI, 2026-09-29). B19's
-      intermediates remain shipped but are legacy (old ranging gate, untested);
-      other fin stations pending.**
+- [x] Fin autocorrelation intermediates shipped so fin ranging is reproducible
+      offline — **B20 (CORTADO_TEST) shipped and test-locked**; it is the only
+      station the demonstration ships, by design.
 - [ ] FDSN password rotated by the PI (was hardcoded upstream).
-- [ ] Branch `modernize-python-segment` reviewed and merged.
+- [x] Branch `modernize-python-segment` reviewed, merged to `main`, and pushed.
 
 ## Assumptions & Limitations
 
 - Refactor, not re-analysis: results are inherited, not re-derived.
+- **Demonstration, not reproduction**: the shipped B20 `CORTADO_TEST` data run
+  the pipeline end to end but do not reproduce the published ranges or densities.
 - Fin detection cannot be re-run offline here (needs IRIS + waveforms); shipped
-  CSVs cover ranging and the tutorial.
+  CSVs cover ranging, selection, and the tutorial.
 - Method limitations are inherent (see tutorial): one singer at a time;
   inter-pulse interval must differ from multipath spacing; bathymetric relief and
   sedimented sites add uncertainty; usable range ~15 km single-station → 40 km
   pooled.
-- MATLAB/R segments may require their native toolchains; "portable" is bounded by
-  those runtimes.
+- Density estimation is downstream of ranging and out of scope; the pipeline's
+  final product is the per-call interpolated range table a density analysis
+  would consume.
 
 ## Notes
 
