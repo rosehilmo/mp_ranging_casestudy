@@ -2,8 +2,13 @@
 
 Given water depth, water and sediment sound speeds, and sediment thickness,
 ``basic_ranging`` returns theoretical differential arrival times (relative to
-the direct water path ``t0``) as a function of source-receiver distance. These
-curves are matched against observed multipath timings to estimate range.
+the direct water path ``t0``) as a function of source-receiver distance.
+
+This straight-ray model is a first-order helper, **not** the source of the final
+ranges: ``run_detection`` uses it only to size the multipath search window
+(``dt_down = max(mp_interp - t0) + 0.2``). Final ranges come from the BELLHOP
+ray-arrival tables in ``data/bellhop_arrival_models/`` via
+``detection/range_estimation.py``.
 """
 
 import math

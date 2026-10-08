@@ -879,8 +879,9 @@ the method can be trusted:
   MP2−MP1.
 
 - **Usable range and call vs. animal density.** Single-station Marianas ranges
-  were reliable to ~20 km [@hilmo2024]; the density application pooled across the
-  seven OBS reached 40 km [@hilmo2025]. Ranging yields *call* densities;
+  were reliable out to 20 km [@hilmo2024]; the density application ranged calls
+  within 40 km at each of the seven OBS and pooled them [@hilmo2025]. Ranging
+  yields *call* densities;
   converting to *animal* densities needs independent knowledge of calling (cue)
   rates, which vary by region and season.
 
@@ -888,7 +889,7 @@ the method can be trusted:
 
 | Step | Module / command |
 |------|------------------|
-| Travel-time tables (used for final ranges) | `data/bellhop_arrival_models/` + `plot_ranges.py` |
+| Travel-time tables (used for final ranges) | `data/bellhop_arrival_models/`, loaded by `bellhop_timings()` in `range_estimation.py` |
 | Straight-ray search-window helper | `whaletracks/detection/basic_ranging_model.py` (called by `run_detection.py`) |
 | Spectrogram, kernel, detection score | `whaletracks/detection/detect_calls.py` |
 | Call & multipath picking | `whaletracks/detection/event_analyzer.py` |
@@ -917,8 +918,9 @@ package `README.md` for setup and usage.
   the US East Coast.
 - Its application to fin-whale call density in the Marianas region, including
   the distance-sampling step, is @hilmo2025 (open access, CC-BY 4.0).
-- The analytic multipath geometry and the autocorrelation step are also
-  documented inline in `basic_ranging_model.py` and `detect_calls.py`.
+- The analytic multipath geometry is documented inline in
+  `basic_ranging_model.py`; the autocorrelation of the detection score is
+  implemented and commented in `cli/run_detection.py`.
 - BELLHOP ray tracing: @porter_bellhop.
 - Passive acoustic density estimation from single-sensor ranges: @harris2013;
   @hilmo2025.
