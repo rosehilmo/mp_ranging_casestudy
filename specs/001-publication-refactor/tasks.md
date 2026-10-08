@@ -2,7 +2,7 @@
 description: "Task list for the publication-readiness refactor"
 ---
 
-*AI-generated draft (Claude, Anthropic) — for review. All parameters and figures are derived from version-controlled scripts and data.*
+*Author: Rose Hilmo. Drafted with AI assistance (Claude, Anthropic), then edited and verified by the author. All parameters and figures are derived from version-controlled scripts and data.*
 
 # Tasks: Publication-readiness refactor of the Marianas multipath ranging case study
 

@@ -1,4 +1,4 @@
-*AI-generated draft (Claude, Anthropic) — for review. All parameters and figures are derived from version-controlled scripts and data.*
+*Author: Rose Hilmo. Drafted with AI assistance (Claude, Anthropic), then edited and verified by the author. All parameters and figures are derived from version-controlled scripts and data.*
 
 # Specification: Port the semi-automated multipath hypothesis selection to Python
 

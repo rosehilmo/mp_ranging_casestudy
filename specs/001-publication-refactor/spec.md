@@ -1,4 +1,4 @@
-*AI-generated draft (Claude, Anthropic) — for review. All parameters and figures are derived from version-controlled scripts and data.*
+*Author: Rose Hilmo. Drafted with AI assistance (Claude, Anthropic), then edited and verified by the author. All parameters and figures are derived from version-controlled scripts and data.*
 
 # Specification: Publication-readiness refactor of the Marianas multipath ranging case study
 
@@ -126,8 +126,9 @@ Refactor discipline: **preserve outputs exactly**; flag suspected bugs in
 - Regression suite in `PythonCodes/tests/`: golden-master pins on the library
   core's numeric outputs (`test_golden_core.py`); fin B20 CORTADO_TEST ranges
   with the airgun `valid_end` bound locked by `test_plot_ranges_fin.py`;
-  structural tests for the hypothesis-selection port; CLI config-parse and GUI
-  import/`--help` smoke tests. **29 tests, all green.** The Bryde's B01
+  structural tests for the hypothesis-selection port; provenance-manifest tests;
+  CLI config-parse and GUI import/`--help` smoke tests. **35 tests, all green.**
+  The Bryde's B01
   BELLHOP-mode golden test was retired with the Bryde's data in the 2026-10-05
   trim (it is recoverable from tag `full-dataset-pre-cleanup`).
 

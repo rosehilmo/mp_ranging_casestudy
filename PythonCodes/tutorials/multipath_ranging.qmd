@@ -4,10 +4,11 @@ subtitle: "A worked tutorial using the Marianas fin-whale case study"
 author: "Rose Hilmo"
 date: "2026-09-25"
 description: >
-  AI-generated draft (Claude, Anthropic), for review. Explains the multipath
-  ranging method for fin whales and walks through the critical parts of the
-  `whaletracks` code. All parameters and figures are derived from
-  version-controlled scripts and data in this repository.
+  By Rose Hilmo; drafted with AI assistance (Claude, Anthropic), then edited and
+  verified by the author. Explains the multipath ranging method for fin whales
+  and walks through the critical parts of the `whaletracks` code. All parameters
+  and figures are derived from version-controlled scripts and data in this
+  repository.
 bibliography: references.bib
 from: markdown-example_lists
 format:
@@ -27,9 +28,10 @@ execute:
 ---
 
 ::: {.callout-note appearance="simple"}
-This tutorial is an **AI-generated draft (Claude, Anthropic) — for review.**
-Every number and figure below is produced by executing the version-controlled
-`whaletracks` code against data in this repository; nothing is hand-entered.
+This tutorial is by **Rose Hilmo**, drafted with **AI assistance (Claude,
+Anthropic)** and then **edited and verified by the author.** Every number and
+figure below is produced by executing the version-controlled `whaletracks` code
+against data in this repository; nothing is hand-entered.
 :::
 
 ::: {.callout-important appearance="simple"}

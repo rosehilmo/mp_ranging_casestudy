@@ -1,4 +1,4 @@
-*AI-generated draft (Claude, Anthropic) — for review. All findings reference version-controlled source.*
+*Author: Rose Hilmo. Drafted with AI assistance (Claude, Anthropic), then edited and verified by the author. All findings reference version-controlled source.*
 
 # Known issues, quirks, and design notes
 

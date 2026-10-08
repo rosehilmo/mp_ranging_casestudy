@@ -1,4 +1,4 @@
-*AI-generated draft (Claude, Anthropic) — for review. All parameters and figures are derived from version-controlled scripts and data.*
+*Author: Rose Hilmo. Drafted with AI assistance (Claude, Anthropic), then edited and verified by the author. All parameters and figures are derived from version-controlled scripts and data.*
 
 # Marianas Multipath Whale Ranging — Research Constitution
 
@@ -75,11 +75,23 @@ and thresholds, autocorrelation window, ranging call-count criteria, and output
 templates. Results are keyed to their config so any run can be regenerated. No
 run parameter is hardcoded in the source.
 
-### V. AI-Generated Text Is Disclosed
+### V. AI Assistance Is Disclosed
 
 Prose drafted with AI assistance (README sections, tutorial prose and captions,
-methods text, these Spec Kit documents) carries the lab's disclosure label and
-is reviewed before use.
+methods text, these Spec Kit documents) carries a disclosure label naming the
+author, the assistance, and the review status. Documents begin as
+*drafted with AI assistance — for review*; once the author has read and checked
+them, the label becomes:
+
+> *Author: Rose Hilmo. Drafted with AI assistance (Claude, Anthropic), then
+> edited and verified by the author.*
+
+Authorship rests with the author, who is accountable for the content; the AI
+contribution is assistance and is named as such. The label is the first line of
+the document (for the Quarto tutorial, the YAML `description` plus a header
+callout). A document that has **not** been through author review keeps the
+draft wording — the verified label is a claim about review, so it is applied
+only when that review has happened.
 
 ### VI. Portable & User-Editable
 
