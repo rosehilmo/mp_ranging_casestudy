@@ -138,6 +138,20 @@ Open it in any browser. The render takes a few minutes, mostly in the
 hypothesis-selection cell; it needs `kaleido_get_chrome` to have been run once.
 A clean render emits no warnings.
 
+**From R / RStudio.** `.qmd` is a Quarto format, not a Python one — RStudio and
+Positron open, edit and render this file natively. But its sixteen code cells
+are all `{python}` under a `jupyter: python3` engine (there is no R or `knitr`
+code in it), so the render still runs on the conda environment above. Either
+activate the environment before launching RStudio, or set
+`QUARTO_PYTHON` to that environment's interpreter:
+
+```bash
+export QUARTO_PYTHON="$(conda run -n mp_ranging_casestudy which python)"
+```
+
+A `ModuleNotFoundError` on the first cell means Quarto picked up the wrong
+Python. Reading the rendered HTML needs neither R nor Python.
+
 ### Interactive verification / manual picking (GUI + network)
 ```bash
 whaletracks-verify --config whaletracks/config/verify_calls.yaml

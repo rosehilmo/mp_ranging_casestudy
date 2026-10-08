@@ -75,6 +75,34 @@ quarto render tutorials/multipath_ranging.qmd
 **Run commands from the `PythonCodes` directory**: the config files use data
 paths relative to it.
 
+### Working in R / RStudio
+
+Quarto is language-agnostic, so `.qmd` is **not** a Python-only format: RStudio
+and Positron open, edit and render `tutorials/multipath_ranging.qmd` as a
+first-class document, and you get the usual outline, visual editor and Render
+button.
+
+What R *cannot* do is execute it. This tutorial declares `jupyter: python3` and
+all sixteen of its code cells are `{python}` — they import the `whaletracks`
+package and work on the shipped data. There is no R or `knitr` code in the
+document, so **rendering always needs the conda environment above**, whichever
+editor starts it. Point Quarto at that environment in one of two ways:
+
+```bash
+# Either: activate the environment, then launch RStudio from that same shell
+conda activate mp_ranging_casestudy && rstudio
+
+# Or: tell Quarto explicitly which Python to use
+export QUARTO_PYTHON="$(conda run -n mp_ranging_casestudy which python)"
+```
+
+Without this, the render stops at the first cell with
+`ModuleNotFoundError: No module named 'plotly'` — that error means Quarto found
+the wrong Python, not that anything is broken.
+
+If you only want to *read* the tutorial, open the rendered
+`multipath_ranging.html`: it needs neither R nor Python.
+
 ## Repository layout
 
 | Path | What it is |
