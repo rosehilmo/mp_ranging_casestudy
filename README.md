@@ -69,8 +69,11 @@ whaletracks-plot-ranges --config whaletracks/config/ranges_fin.yaml --station B2
 quarto render tutorials/multipath_ranging.qmd
 ```
 
-`tutorials/multipath_ranging.html` opens in any browser — it is self-contained
-(no network, no CDN) and carries all its figures inline.
+That last command **builds** `tutorials/multipath_ranging.html`, which then opens
+in any browser — it is self-contained (no network, no CDN) and carries all its
+figures inline, so it can be emailed or shared as a single file. The HTML is a
+build artifact and is deliberately not committed, so a fresh download does not
+contain it until you render it once.
 
 **Run commands from the `PythonCodes` directory**: the config files use data
 paths relative to it.
@@ -100,8 +103,9 @@ Without this, the render stops at the first cell with
 `ModuleNotFoundError: No module named 'plotly'` — that error means Quarto found
 the wrong Python, not that anything is broken.
 
-If you only want to *read* the tutorial, open the rendered
-`multipath_ranging.html`: it needs neither R nor Python.
+If you only want to *read* the tutorial, you need neither R nor Python — but the
+HTML is not shipped in the repository, so it has to be rendered once (by you, or
+by a colleague who then sends you the single self-contained file).
 
 ## Repository layout
 

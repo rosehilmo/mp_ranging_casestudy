@@ -150,7 +150,9 @@ export QUARTO_PYTHON="$(conda run -n mp_ranging_casestudy which python)"
 ```
 
 A `ModuleNotFoundError` on the first cell means Quarto picked up the wrong
-Python. Reading the rendered HTML needs neither R nor Python.
+Python. Reading the rendered HTML needs neither R nor Python — but the HTML is a
+build artifact, not committed, so it must be rendered once before it can be read
+or shared.
 
 ### Interactive verification / manual picking (GUI + network)
 ```bash
