@@ -106,11 +106,11 @@ implicit.
 - **Station set**: one shared table `PythonCodes/data/Station_info_Marianas.csv`
   = the **7 published good-data OBS** (B19, B01, B02, B09, B12, B18, B20), with
   per-station instrument depth, sub-seafloor reflector depth, channel (`HHZ`),
-  and deployment dates (Feb 2012 → Jan/Feb 2013). Extra fin stations
-  (B05/B06/B11/B14/N11/S10) present in some raw files are **not** in the
-  published set and are excluded from the station table. (BELLHOP tables for a
-  few of them are still shipped — the ray tables are shared model data and were
-  kept whole; without a station-table entry they are not runnable.)
+  and deployment dates (Feb 2012 → Jan/Feb 2013). Stations outside the
+  published set are **not** in the station table and are not referenced by the
+  code or docs. BELLHOP tables are shipped for four of them (B05, B11, N11,
+  S10) because the ray tables are shared model data and were kept whole;
+  without a station-table entry they are not runnable.
 - **BELLHOP arrival tables**: per-station ray-traced travel-time tables in
   `PythonCodes/data/bellhop_arrival_models/` (`interp_r/d/mp1/mp2/mp3`, 0–40 km),
   provided with the repo, computed for the site profiles/geometry of Hilmo &

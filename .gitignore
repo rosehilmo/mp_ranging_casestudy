@@ -39,6 +39,10 @@ Sample documentation_NEAREST/
 # The JASA 2024 paper is standard ASA copyright; do not post the published PDF publicly.
 PythonCodes/literature/
 
+# Ad-hoc / exploratory figures — figures belong to a script that regenerates
+# them (constitution Principle III), not to the repository as loose PNGs.
+/PythonCodes/figures/
+
 # Quarto render artifacts
 /PythonCodes/tutorials/*_files/
 /PythonCodes/tutorials/*.html
