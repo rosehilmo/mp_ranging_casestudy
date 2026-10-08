@@ -108,7 +108,9 @@ implicit.
   per-station instrument depth, sub-seafloor reflector depth, channel (`HHZ`),
   and deployment dates (Feb 2012 → Jan/Feb 2013). Extra fin stations
   (B05/B06/B11/B14/N11/S10) present in some raw files are **not** in the
-  published set and are excluded.
+  published set and are excluded from the station table. (BELLHOP tables for a
+  few of them are still shipped — the ray tables are shared model data and were
+  kept whole; without a station-table entry they are not runnable.)
 - **BELLHOP arrival tables**: per-station ray-traced travel-time tables in
   `PythonCodes/data/bellhop_arrival_models/` (`interp_r/d/mp1/mp2/mp3`, 0–40 km),
   provided with the repo, computed for the site profiles/geometry of Hilmo &
@@ -120,7 +122,8 @@ implicit.
   analyst-corrected track tables. The Bryde's configs are retained as an
   adaptation example; Bryde's data is not shipped.
 - **Source — whale calls**: **fin** 20-Hz call, detected with a synthetic
-  down-swept template ≈22→15 Hz over ~0.8 s (kernel in `detect_fin.yaml`);
+  down-swept template **20→15 Hz** over 0.8 s (Hilmo & Wilcock 2024, Table I;
+  kernel in `detect_fin.yaml`);
   **Bryde's** ~37→33 Hz variant (`detect_brydes.yaml`). Multipath spacing is
   measured by **autocorrelation of the detection score** over a ~20-min window.
 - **Literature**: Hilmo & Wilcock (2024, JASA, doi:10.1121/10.0024615) —
@@ -188,9 +191,10 @@ implicit.
 - **Lint / tests**: `ruff` clean; `MPLBACKEND=Agg python -m pytest -q` green
   before any commit (lab rule). GUI/network CLIs covered by import / `--help` /
   config-parse smoke tests only.
-- **Tutorial**: `quarto render` runs all cells against shipped data; citations
-  resolve; only the book-only `@sec-distance_sampling` cross-ref is unresolved by
-  design.
+- **Tutorial**: `quarto render` runs all cells against shipped data; all
+  citations and cross-references resolve. Since the tutorial was made
+  self-contained (2026-10-05) the render is **warning-free** — treat any warning
+  as a regression.
 - **Band sanity**: detector band lies within the instrument passband; fin S.
   Atlantic-style high-frequency calls are out of band by design (fin target here
   is the 20-Hz pulse).

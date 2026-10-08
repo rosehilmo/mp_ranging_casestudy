@@ -1,6 +1,7 @@
-# Configuration for interactive manual picking of Bryde's whale calls.
-# Values reproduce the parameters previously hardcoded in
-# Brydes_manual_picker.py.
+# Configuration for interactive manual picking of calls.
+#
+# NOTE: these values are a BRYDE'S-tuned example; adjust the bands for your own
+# call type (cf. detect_fin.yaml for the fin demonstration's parameters).
 
 client: IRIS            # FDSN data center
 network: XF             # seismic network code

@@ -79,7 +79,8 @@ Method and engineering decisions, with rationale. Back-filled from the refactor.
   under the published ≥2/≥10 ranging gate), matching Hilmo et al. (2025).
 - **Unphysical model values are filtered out of figures, never accommodated by
   rescaling axes** (PI preference, 2026-09-28). The tutorial delay-curve masks
-  BELLHOP near-field artifacts (< 0.3 km; see `KNOWN_ISSUES.md` #10); the data
+  BELLHOP near-field artifacts (< 0.3 km; see `KNOWN_ISSUES.md`, "Edge cases
+  and quirks" → *Near-field BELLHOP rows*); the data
   files themselves are untouched (preserve-exactly).
 
 ## Data-layout decisions

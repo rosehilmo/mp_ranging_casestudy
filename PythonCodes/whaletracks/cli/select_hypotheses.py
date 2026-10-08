@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Semi-automated multipath hypothesis selection (MATLAB port CLI).
+"""Semi-automated multipath hypothesis selection (CLI).
 
-Config-driven port of MATLABCodes/clean_group_ranges.m. Runs the automated
-part — filter, group, qualify, link supertracks, assign best hypotheses — and
-writes ``{station}_grouped_ranges.csv``. With ``--review`` it then replays the
-MATLAB interactive verification loop (requires a display): each group is shown
-in context and the analyst accepts (0), overrides the hypothesis (1/2/3) or
-rejects the group (9); the corrected table is written alongside as
-``*_corrected.csv``.
+Config-driven. Runs the automated part — filter, group, qualify, link
+supertracks, assign best hypotheses — and writes
+``{station}_grouped_ranges.csv``. With ``--review`` it then runs the interactive
+analyst verification (requires a display): each group is shown in context and
+the analyst accepts (0), overrides the hypothesis (1/2/3) or rejects the group
+(9); the corrected table is written alongside as ``*_corrected.csv``.
 
 Example:
     whaletracks-select --config whaletracks/config/select_fin.yaml --station B20
@@ -56,7 +55,7 @@ def run_selection(cfg, station):
 
 
 def review_groups(grouped):
-    """MATLAB interactive verification loop (requires a display).
+    """Interactive analyst verification loop (requires a display).
 
     Mutates ``grouped``: 0 accepts, 1/2/3 overrides the hypothesis for the
     group, 9 rejects the group (use_track False, supertrack/hypothesis NaN).

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "whaletracks"
 version = "0.1.0"
-description = "Bryde's whale call detection and multipath acoustic ranging (Marianas case study)"
+description = "Baleen whale call detection and multipath acoustic ranging (Marianas fin-whale demonstration)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

@@ -1,6 +1,11 @@
-# Configuration for interactive verification of detected Bryde's whale calls.
-# Values reproduce the parameters previously hardcoded in
-# brydes_call_verification.py.
+# Configuration for interactive verification of detected calls.
+#
+# NOTE: these values are a BRYDE'S-tuned example (spectrogram band 12-45 Hz,
+# Bryde's detection file). The detection CSV named below is not shipped with
+# this demonstration. To verify the shipped fin demonstration instead, point
+# `detection_file` at `data/fin_whale/B20_mp_CORTADO_TEST.csv` and set the
+# spectrogram/plot bands to the fin range (cf. detect_fin.yaml: freqlim
+# [10, 40]).
 
 client: IRIS            # FDSN data center
 network: XF             # seismic network code

@@ -1,8 +1,7 @@
 # Detection + multipath ranging config — FIN whales, Marianas.
 # Reproduces the published method of Hilmo & Wilcock (2024, JASA) and
-# Hilmo et al. (2025, Endangered Species Research), as implemented in the
-# canonical MP_Marianas_automation.py (fin branch).
-# Used by: whaletracks-detect --config detect_fin.yaml
+# Hilmo et al. (2025, Endangered Species Research).
+# Used by: whaletracks-detect --config detect_fin.yaml --station B20
 
 client: IRIS            # FDSN data center (anonymous access; public data)
 network: XF
@@ -24,8 +23,9 @@ sound_speed:
   sediment: 1512
 
 # Fin-call detection kernel (descending FM sweep, 20->15 Hz over 0.8 s, per
-# Hilmo & Wilcock 2024 Table I and Hilmo et al. 2025; corrects the automation
-# code copy's f0=22 — see KNOWN_ISSUES.md, species-agnostic decisions #6).
+# Hilmo & Wilcock 2024 Table I and Hilmo et al. 2025; corrects an f0=22 copy
+# that had drifted from the paper — see KNOWN_ISSUES.md, "Fin-whale profile"
+# -> Fin kernel).
 kernel:
   f0: 20
   f1: 15
@@ -48,9 +48,10 @@ spectrogram:
   overlap: 0.95
   freqlim: [10, 40]
 
-# SNR call band as computed by the automation code: [(f0+f1)/2 - 3, (f0+f1)/2 + 3]
-# with its f0=22 kernel = [15.5, 21.5]. Retained as-is after the kernel correction
-# (a 20-based formula would give [14.5, 20.5]) — see KNOWN_ISSUES.md #6.
+# SNR call band, [(f0+f1)/2 - 3, (f0+f1)/2 + 3] evaluated with the earlier f0=22
+# kernel = [15.5, 21.5]. Retained as-is after the kernel correction (a 20-based
+# formula would give [14.5, 20.5]) — see KNOWN_ISSUES.md, "Fin-whale profile"
+# -> Fin kernel.
 # No eq_band -> no earthquake-band SNR column (the published fin method does not
 # use an automated earthquake/T-phase discriminator).
 snr:

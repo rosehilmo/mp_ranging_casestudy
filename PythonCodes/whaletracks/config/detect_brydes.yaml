@@ -1,5 +1,6 @@
 # Detection + multipath ranging config — BRYDE'S whales, Marianas.
-# Reproduces the parameters of the legacy MP_Marianas_automation_Brydes.py.
+# Retained as a worked example of adapting detection to a second call type:
+# it differs from detect_fin.yaml only in parameters (kernel, bands, window).
 # Used by: whaletracks-detect --config detect_brydes.yaml
 
 client: IRIS            # FDSN data center (anonymous access; public data)

@@ -1,7 +1,11 @@
 # Multipath hypothesis selection config — BRYDE'S whales, Marianas.
-# Port of MATLABCodes/clean_group_ranges_Brydes.m: identical algorithm to the
-# fin variant, with looser group qualification (at least 7 ranges, mean window
-# calls > 2). Used by: whaletracks-select --config select_brydes.yaml --station B01
+# Identical algorithm to the fin variant, with looser group qualification (at
+# least 7 ranges, mean window calls > 2) — a worked example of adapting the
+# selection to a second call type.
+# Used by: whaletracks-select --config select_brydes.yaml --station B01
+#
+# NOTE: the Bryde's *data* is not shipped with this demonstration; point
+# input_dir/output_dir at your own detections before running this config.
 
 input_dir: data/brydes_whale
 input_template: "Marianas_auto_{station}_v2.csv"
@@ -15,9 +19,9 @@ filter:
   min_window_calls: 1
   saturation_km: 40
 
-# Bryde's keeps the MATLAB source's grouping/track values (1.6 km / 2 h) —
-# there is no published Bryde's selection paper to correct against (the fin
-# config uses the Hilmo et al. 2025 values, 1.5 km / 3 h).
+# Bryde's keeps the legacy grouping/track values (1.6 km / 2 h) — there is no
+# published Bryde's selection to calibrate against (the fin config uses the
+# Hilmo et al. 2025 values, 1.5 km / 3 h).
 grouping:
   range_jump_km: 1.6
   time_gap_hours: 1

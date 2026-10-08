@@ -1,23 +1,22 @@
-"""Semi-automated multipath hypothesis selection (MATLAB port).
+"""Semi-automated multipath hypothesis selection.
 
-Port of ``MATLABCodes/clean_group_ranges.m`` (fin) /
-``clean_group_ranges_Brydes.m`` (same algorithm, Bryde's thresholds) and the
-follow-on ``interpolate_for_call_ranges_marianas.m``. Turns the raw ranging
-output (three candidate ranges per window, one per timing hypothesis) into
-grouped whale tracks with a best hypothesis per group, and removes spurious
-ranges that fail the track criteria (Hilmo et al. 2025).
+Turns the raw ranging output (three candidate ranges per window, one per timing
+hypothesis) into grouped whale tracks with a best hypothesis per group, and
+removes spurious ranges that fail the track criteria. This is the semi-automated
+selection step of Hilmo et al. (2025).
 
-The port preserves the MATLAB behaviour exactly, including its quirks:
+Behaviours worth knowing (all deliberate — see ``KNOWN_ISSUES.md``):
 
-- the supertrack boundary group belongs to the earlier segment and the
+- the supertrack boundary group belongs to the earlier segment, and the
   junction across a boundary is never scored;
-- single-group supertracks get ``best_hypothesis = NaN``;
-- hypothesis combinations are enumerated in MATLAB ``combinations`` order
-  (first group varies slowest) and ties break to the first minimum;
-- combination costs containing NaN ranges are ignored (MATLAB ``min`` omits
-  NaN); if every combination is NaN the first is taken;
+- single-group supertracks are left unassigned (``best_hypothesis = NaN``):
+  a lone group has no neighbour to score against, so it is deferred to review;
+- hypothesis combinations are enumerated with the first group varying slowest,
+  and ties break to the first minimum;
+- combination costs containing NaN ranges are ignored; if every combination is
+  NaN the first is taken;
 - segments with more than ``max_segment_groups`` groups are split at their
-  midpoint using MATLAB ``round`` (half away from zero).
+  midpoint, halves rounded away from zero.
 
 The interactive analyst verification (accept / override / reject per group)
 stays a manual step — see the ``--review`` mode of ``whaletracks-select``.
@@ -32,14 +31,15 @@ SELECTION_COLUMNS = ["groupnum", "use_track", "supertrack", "best_hypothesis"]
 _HYPOTHESIS_RANGE = {1: "range_D_MP1", 2: "range_MP1_MP2", 3: "range_MP2_MP3"}
 
 #: Published fin parameters (Hilmo et al. 2025): ranges within 1.5 km and 1 h
-#: are grouped; groups less than 3 h apart are linked into tracks. (The
-#: supplied MATLAB source drifted to 1.6 km / 2 h — see KNOWN_ISSUES.)
+#: are grouped; groups less than 3 h apart are linked into tracks. (The Bryde's
+#: config uses 1.6 km / 2 h — see KNOWN_ISSUES.md, "Fin-whale profile" →
+#: *Selection grouping/track parameters*.)
 ONE_HOUR = pd.Timedelta(hours=1)
 THREE_HOURS = pd.Timedelta(hours=3)
 
 
-def _matlab_round(x):
-    """MATLAB ``round``: halves away from zero (positive inputs here)."""
+def _round_half_up(x):
+    """Round halves away from zero (inputs here are positive)."""
     return int(np.floor(x + 0.5))
 
 
@@ -50,7 +50,7 @@ def filter_ranges(ranges_df, start=None, max_range_km=25.0,
     Returns ``(working, mask)``: the (possibly time-cut) full table with
     saturated ranges set to NaN, and the boolean mask of rows that qualify for
     grouping (``range_D_MP1 < max_range_km`` and ``auto_count >=
-    min_window_calls``; NaN ranges drop out of the comparison, as in MATLAB).
+    min_window_calls``; NaN ranges drop out of the comparison).
     """
     working = ranges_df.copy()
     working["time"] = pd.to_datetime(working["time"])
@@ -73,7 +73,7 @@ def filter_ranges(ranges_df, start=None, max_range_km=25.0,
 def group_ranges(times, r1, range_jump_km=1.5, time_gap=ONE_HOUR):
     """Step 2: walk rows in order; new group on a range jump or a time gap.
 
-    Returns 1-based group ids, one per row (MATLAB ``grouparray``).
+    Returns 1-based group ids, one per row.
     """
     n = len(r1)
     groups = np.empty(n, dtype=int)
@@ -93,10 +93,9 @@ def qualify_groups(groups, r1, window_calls, min_group_rows=12,
                    min_mean_calls=10.0, max_zero_fraction=0.5):
     """Step 3: per-row ``use_track`` flag.
 
-    A group qualifies when it has at least ``min_group_rows`` rows (MATLAB
-    ``> min_group_rows - 1``), fewer than ``max_zero_fraction`` of its
-    ``range_D_MP1`` values equal 0, and mean window call count strictly above
-    ``min_mean_calls``.
+    A group qualifies when it has at least ``min_group_rows`` rows, fewer than
+    ``max_zero_fraction`` of its ``range_D_MP1`` values equal 0, and mean window
+    call count strictly above ``min_mean_calls``.
     """
     use_track = np.zeros(len(groups), dtype=bool)
     for gid in np.unique(groups):
@@ -112,11 +111,11 @@ def qualify_groups(groups, r1, window_calls, min_group_rows=12,
 
 
 def _segment_bounds(start_times, end_times, supertrack_gap, max_segment_groups):
-    """Step 4: 1-based segment boundary indices (MATLAB ``gapinds``).
+    """Step 4: 1-based segment boundary indices.
 
     Splits between consecutive qualifying groups whose gap (next start minus
     previous end) exceeds ``supertrack_gap``; then splits any segment longer
-    than ``max_segment_groups`` at its (MATLAB-rounded) midpoint.
+    than ``max_segment_groups`` at its midpoint (halves rounded away from zero).
     """
     k = len(start_times)
     gapinds = [1]
@@ -130,7 +129,7 @@ def _segment_bounds(start_times, end_times, supertrack_gap, max_segment_groups):
     a = 0
     for pos in large:  # 1-based position into the original gapinds
         idx = pos - 1 + a
-        gapinds.insert(idx + 1, _matlab_round((gapinds[idx] + gapinds[idx + 1]) / 2))
+        gapinds.insert(idx + 1, _round_half_up((gapinds[idx] + gapinds[idx + 1]) / 2))
         a += 1
     return gapinds
 
@@ -141,13 +140,14 @@ def _assign_segment(start_ranges, end_ranges, chunk_size=3**12):
     ``start_ranges`` / ``end_ranges`` are (n, 3) arrays indexed
     [group, hypothesis]. Returns a list of n hypothesis codes (1..3).
 
-    The enumeration streams in chunks so long segments stay memory-safe (the
-    MATLAB ``combinations`` table would exhaust memory somewhere around 14
-    groups; the >18-group midpoint split alone does not prevent that — see
-    KNOWN_ISSUES). The argmin is identical to MATLAB's: combinations in
-    first-variable-slowest order, NaN costs omitted, ties to the first
-    minimum, all-NaN falls back to the first combination. The sqrt of the
-    MATLAB cost is skipped — it is monotonic, so the argmin is unchanged.
+    The enumeration streams in chunks so long segments stay memory-safe: a
+    17-group supertrack is 3^17 ~ 129 M combinations, which materialising the
+    whole table would not survive, and the >18-group midpoint split alone does
+    not prevent that (see KNOWN_ISSUES.md, "Hypothesis-selection — behavioural
+    notes"). The argmin is exact: combinations run
+    with the first group varying slowest, NaN costs are omitted, ties go to the
+    first minimum, and all-NaN falls back to the first combination. The square
+    root of the cost is skipped — it is monotonic, so the argmin is unchanged.
     """
     n = len(start_ranges)
     total = 3**n
@@ -155,7 +155,7 @@ def _assign_segment(start_ranges, end_ranges, chunk_size=3**12):
     best_idx, best_cost = 0, np.nan
     for lo in range(0, total, chunk_size):
         idx = np.arange(lo, min(lo + chunk_size, total))
-        # MATLAB combinations order: first variable varies slowest (C order).
+        # Enumeration order: the first group varies slowest (C order).
         combos = np.stack(np.unravel_index(idx, (3,) * n), axis=1)
         starts = start_ranges[rows[None, :], combos]
         ends = end_ranges[rows[None, :], combos]
@@ -164,7 +164,7 @@ def _assign_segment(start_ranges, end_ranges, chunk_size=3**12):
             k = int(np.nanargmin(cost))
         except ValueError:  # all-NaN chunk
             continue
-        # Strict < keeps the earliest global minimum, as MATLAB min does.
+        # Strict < keeps the earliest global minimum.
         if np.isnan(best_cost) or cost[k] < best_cost:
             best_idx, best_cost = int(idx[k]), float(cost[k])
     combo = np.unravel_index(best_idx, (3,) * n)
@@ -181,10 +181,10 @@ def select_hypotheses(ranges_df, min_group_rows=12, min_mean_calls=10.0,
     Defaults are the published fin parameters (Hilmo et al. 2025): ranges
     within 1.5 km / 1 h form groups; groups of >= 12 ranges less than 3 h
     apart link into tracks; ``min_group_rows=12``, ``min_mean_calls=10``.
-    Bryde's uses ``min_group_rows=7``, ``min_mean_calls=2`` and the MATLAB
-    source's 1.6 km / 2 h (``clean_group_ranges_Brydes.m``). Columns added:
+    The Bryde's profile uses ``min_group_rows=7``, ``min_mean_calls=2`` and
+    1.6 km / 2 h. Columns added:
     ``groupnum`` (1-based, NaN outside the filtered rows), ``use_track``,
-    ``supertrack`` (MATLAB 1-based boundary index) and ``best_hypothesis``
+    ``supertrack`` (the 1-based boundary index) and ``best_hypothesis``
     (1 = MP1-Direct, 2 = MP2-MP1, 3 = MP3-MP2; NaN for single-group
     supertracks and unassigned rows).
     """
@@ -220,8 +220,8 @@ def select_hypotheses(ranges_df, min_group_rows=12, min_mean_calls=10.0,
     if len(cluster) == 0:
         return working
 
-    # Per qualifying group: first/last row's time and ranges (NaN kept, as in
-    # MATLAB — the non-NaN variant is commented out in the source).
+    # Per qualifying group: first/last row's time and ranges (NaN values are
+    # kept here; they drop out of the cost comparison instead).
     first = {g: np.flatnonzero(groups == g)[0] for g in cluster}
     last = {g: np.flatnonzero(groups == g)[-1] for g in cluster}
     start_times = [times[first[g]] for g in cluster]
@@ -245,7 +245,7 @@ def select_hypotheses(ranges_df, min_group_rows=12, min_mean_calls=10.0,
         if not seg:
             continue
         if len(seg) == 1:
-            hyp = [np.nan]  # MATLAB: single-group supertrack -> NaN
+            hyp = [np.nan]  # single group: no neighbour to score against
         else:
             rows = [p - 1 for p in seg]
             hyp = _assign_segment(start_ranges[rows], end_ranges[rows])
@@ -274,14 +274,14 @@ def selected_range(grouped_df):
 
 
 def interpolate_call_ranges(grouped_df, calls_df, peak_col="peak_time"):
-    """Step 7 (``interpolate_for_call_ranges_marianas.m``): per-call ranges.
+    """Step 7: per-call ranges.
 
     For each supertrack among the ``use_track`` rows, linearly interpolate the
     selected range (``true_range``) against time onto every detected call's
     ``peak_time`` inside the supertrack's time span, and onto the full
     per-window table. Returns ``(calls_out, grouped_out)``, each a copy with
     an ``interp_range`` column. Supertracks with fewer than two rows are
-    skipped (MATLAB ``interp1`` requires two points).
+    skipped (interpolation needs two points).
     """
     grouped_out = grouped_df.copy()
     grouped_out["time"] = pd.to_datetime(grouped_out["time"])

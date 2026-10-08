@@ -1,5 +1,9 @@
-# Configuration for range estimation + plotting from autocorrelation multipaths.
-# Rewrite of plot_ranges_calltimings_autocorr_Brydes.py.
+# Configuration for range estimation + plotting from autocorrelation multipaths
+# — BRYDE'S whales, Marianas. Retained as a worked example of adapting the
+# ranging step to a second call type.
+#
+# NOTE: the Bryde's *data* is not shipped with this demonstration; point
+# calls_dir/output_dir at your own detections before running this config.
 #
 # Station-aware: pick a station with `--station B01` and the input/output paths
 # are filled from the templates below. Paths are resolved relative to the
