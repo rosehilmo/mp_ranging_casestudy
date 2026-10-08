@@ -171,7 +171,8 @@ Refactor discipline: **preserve outputs exactly**; flag suspected bugs in
 - [~] ~~MATLAB process converted to Python~~ / ~~R segment refactored~~ —
       **out of scope** after the 2026-10-05 trim: the selection algorithm was
       ported (002) and the remaining MATLAB/R scripts were retired, not ported.
-- [ ] Per-output provenance manifest (station/channel/time + config id).
+- [x] Per-output provenance manifest (station/channel/time + config id) —
+      `<output>.provenance.yaml` sidecars written by `common/provenance.py`.
 - [x] Fin autocorrelation intermediates shipped so fin ranging is reproducible
       offline — **B20 (CORTADO_TEST) shipped and test-locked**; it is the only
       station the demonstration ships, by design.

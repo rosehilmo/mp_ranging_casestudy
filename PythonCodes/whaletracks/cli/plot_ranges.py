@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Estimate whale-to-station ranges from autocorrelation multipath timings.
 
-Config-driven rewrite of plot_ranges_calltimings_autocorr_Brydes.py. For each
-autocorrelation minute, the strongest multipath timing is matched against a
-theoretical timing-vs-distance curve (BELLHOP ray table or the analytic ranging
-model) to estimate range. Results are written to a CSV and plotted.
+Config-driven. For each autocorrelation minute, the strongest multipath timing
+is matched against a theoretical timing-vs-distance curve (BELLHOP ray table or
+the analytic ranging model) to estimate range. Results are written to a CSV
+(with a provenance sidecar) and plotted.
 
 Example:
     whaletracks-plot-ranges --config whaletracks/config/ranges_fin.yaml \
@@ -20,6 +20,7 @@ import pandas as pd
 from matplotlib.dates import DateFormatter
 
 from whaletracks.cli._common import LOG, load_yaml, setup_logging
+from whaletracks.common import provenance
 from whaletracks.detection import basic_ranging_model as ranging
 from whaletracks.detection.range_estimation import (
     bellhop_timings,
@@ -59,8 +60,27 @@ def _load_ranging(cfg, station):
     raise ValueError(f"Unknown ranging_source: {source!r} (expected 'bellhop' or 'analytic')")
 
 
-def estimate_ranges(cfg, station, save=None, show=False):
-    """Match multipath timings to ranges for one station; write CSV, plot."""
+def _unique(df, column):
+    """The single value of ``column``, or None if absent/mixed."""
+    if column not in df:
+        return None
+    values = df[column].dropna().unique()
+    return str(values[0]) if len(values) == 1 else None
+
+
+def _bellhop_path(cfg, station):
+    """Path of the station's BELLHOP table, or None in analytic mode."""
+    if cfg["ranging_source"] != "bellhop":
+        return None
+    return os.path.join(cfg["bellhop_dir"], cfg["bellhop_template"].format(station=station))
+
+
+def estimate_ranges(cfg, station, save=None, show=False, config_path=None):
+    """Match multipath timings to ranges for one station; write CSV, plot.
+
+    Also writes a provenance sidecar next to the CSV (see
+    ``whaletracks.common.provenance``).
+    """
     distance, mp_1_timing, mp_2_timing, mp_3_timing, mp_1_sub = _load_ranging(cfg, station)
 
     calls_path = os.path.join(cfg["calls_dir"], cfg["calls_template"].format(station=station))
@@ -84,6 +104,37 @@ def estimate_ranges(cfg, station, save=None, show=False):
     out_path = os.path.join(cfg["output_dir"], cfg["output_template"].format(station=station))
     os.makedirs(cfg["output_dir"], exist_ok=True)
     saveranges.to_csv(out_path, index=False)
+
+    # Network and station come from the detection CSV itself rather than the
+    # config, so they describe the data that was actually ranged. The waveform
+    # channel is recorded by the detection step (see its manifest).
+    inputs = [calls_path, auto_path]
+    bellhop_path = _bellhop_path(cfg, station)
+    if bellhop_path:
+        inputs.append(bellhop_path)
+    provenance.write_manifest(
+        out_path,
+        command="whaletracks-plot-ranges",
+        config_path=config_path,
+        parameters={
+            "ranging_source": cfg["ranging_source"],
+            "reflectivity": bool(cfg.get("reflectivity")),
+            "valid_start": cfg.get("valid_start"),
+            "valid_end": cfg.get("valid_end"),
+            "ranging": {
+                "min_center": gate.get("min_center", 1),
+                "min_window": gate.get("min_window", 0),
+                "window_length_s": gate.get("window_length_s", 1200),
+            },
+        },
+        source={
+            "network": _unique(df_calls, "network_code"),
+            "station": _unique(df_calls, "station_code") or station,
+            "time_span": provenance.time_span(saveranges["time"]),
+        },
+        inputs=inputs,
+        rows=len(saveranges),
+    )
 
     # The CSV keeps every ranged window; the scatter plot shows those above the
     # auto_max quality threshold, coloured by the dB amplitude of the strongest
@@ -121,7 +172,8 @@ def main(argv=None):
 
     setup_logging(args.verbose)
     cfg = load_yaml(args.config)
-    estimate_ranges(cfg, args.station, save=args.save, show=args.show)
+    estimate_ranges(cfg, args.station, save=args.save, show=args.show,
+                    config_path=args.config)
 
 
 if __name__ == "__main__":

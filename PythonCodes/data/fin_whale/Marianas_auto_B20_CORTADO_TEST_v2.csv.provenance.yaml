@@ -1,0 +1,39 @@
+# Provenance manifest — written by whaletracks alongside the file
+# it describes (constitution Principle III). Generated; do not edit.
+file:
+  name: Marianas_auto_B20_CORTADO_TEST_v2.csv
+  sha256: sha256:64559eb0091ac76a09a4f951326fc9310473c1b1d9f2c96e6f617900c999f441
+  rows: 7105
+generated:
+  utc: '2026-10-08T17:21:46Z'
+  command: whaletracks-plot-ranges
+  whaletracks_version: 0.1.0
+  git_commit: 69674a6
+config:
+  file: whaletracks/config/ranges_fin.yaml
+  sha256: sha256:c9247a8f19cb660541b155d83e92a7605f63a1fdc76350e7ce440e1e8456f64d
+  parameters:
+    ranging_source: bellhop
+    reflectivity: false
+    valid_start: null
+    valid_end: '2013-02-01'
+    ranging:
+      min_center: 2
+      min_window: 10
+      window_length_s: 1200
+source:
+  network: XF
+  station: B20
+  time_span:
+    start: '2012-03-01T04:14:00.722660+00:00'
+    end: '2013-01-31T06:56:00.725839+00:00'
+inputs:
+- file: data/fin_whale/B20_mp_CORTADO_TEST.csv
+  sha256: sha256:ce9493f3735eadb5ba1f85f2a0bcaae09a4b25a204f8d1aa9131601829b78e86
+  rows: 120679
+- file: data/fin_whale/auto_B20_mp_CORTADO_TEST.csv
+  sha256: sha256:a8ca0ecfeee760626d172bb8eb8bdc24a12969f8a733fbd665bd86d55871b631
+  rows: 8614
+- file: data/bellhop_arrival_models/Marianas_ray_B20_bellhop_arrivals.csv
+  sha256: sha256:4cd77204c710deb8564b57a1e7de23f2b248fdf68afaffd4ee0e3cc91045f0b8
+  rows: 4001

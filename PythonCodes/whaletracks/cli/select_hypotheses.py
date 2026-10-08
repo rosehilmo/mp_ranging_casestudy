@@ -18,6 +18,7 @@ import os
 import pandas as pd
 
 from whaletracks.cli._common import LOG, load_yaml, setup_logging
+from whaletracks.common import provenance
 from whaletracks.detection.hypothesis_selection import (
     select_hypotheses,
     selected_range,
@@ -115,11 +116,32 @@ def main(argv=None):
     grouped.to_csv(out, index=False)
     LOG.info("Wrote %s", out)
 
+    in_path = os.path.join(
+        cfg["input_dir"], cfg["input_template"].format(station=args.station)
+    )
+    params = {k: cfg[k] for k in ("filter", "grouping", "qualify", "supertrack") if k in cfg}
+    source = {
+        "station": args.station,
+        "time_span": provenance.time_span(grouped["time"]),
+    }
+    provenance.write_manifest(
+        out, command="whaletracks-select", config_path=args.config,
+        parameters=params, source=source, inputs=[in_path], rows=len(grouped),
+    )
+
     if args.review:
         corrected = review_groups(grouped)
         out_corr = out.replace(".csv", "_corrected.csv")
         corrected.to_csv(out_corr, index=False)
         LOG.info("Wrote %s", out_corr)
+        provenance.write_manifest(
+            out_corr, command="whaletracks-select --review",
+            config_path=args.config, parameters=params, source=source,
+            inputs=[in_path], rows=len(corrected),
+            notes="Analyst-verified: hypotheses accepted, overridden or groups "
+                  "rejected by hand during an interactive review of the "
+                  "automated selection. Not reproducible by re-running.",
+        )
 
 
 if __name__ == "__main__":

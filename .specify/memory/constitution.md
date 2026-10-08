@@ -58,9 +58,14 @@ segments are flagged, not silently dropped or filled.
 Every output links back to the code, the input data
 (network/station/channel/time), and the parameter choices that produced it.
 Output file names encode the station (`{station}_mp.csv`,
-`auto_{station}_mp.csv`, `Marianas_auto_{station}_v2.csv`). If a range estimate
-can't be traced to a waveform span and a config, it doesn't belong in the
-results.
+`auto_{station}_mp.csv`, `Marianas_auto_{station}_v2.csv`), and each generated
+CSV is written with a **`<output>.provenance.yaml` sidecar**
+(`whaletracks/common/provenance.py`) recording the command, code version and
+git commit, the config and its SHA-256 with the parameters actually applied,
+the source network/station/channel/time span, and a SHA-256 for every input.
+A manifest never claims a run that did not happen: files the repository ships
+but did not generate say so explicitly. If a range estimate can't be traced to
+a waveform span and a config, it doesn't belong in the results.
 
 ### IV. Configuration Is Versioned
 

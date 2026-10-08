@@ -97,6 +97,25 @@ Method and engineering decisions, with rationale. Back-filled from the refactor.
   only `data/fin_whale/` — the B20 `CORTADO_TEST` set — the station table, and
   the BELLHOP tables are shipped.)*
 
+## Provenance
+
+- **Sidecar YAML per output** (`<output>.provenance.yaml`, 2026-10-08, T025).
+  Chosen over an in-CSV comment header (which would change the output bytes and
+  break the golden-master comparisons) and over a central run registry (which
+  goes stale the moment a file is copied): the sidecar travels with the file,
+  is readable without the package installed, and leaves the output untouched.
+  It records the command + code version + git commit, the config and its
+  SHA-256 plus the parameters actually applied, the source
+  network/station/channel/time span, and a SHA-256 for every input.
+- **A manifest never claims a run that did not happen.** Files the repository
+  ships but did not generate — the B20 detection inputs, and the
+  analyst-corrected selection table — carry `command: null` and a note saying
+  where they came from, instead of a command and code version that would imply
+  reproducibility they do not have.
+- Re-running a stage reproduces the output bytes and changes only
+  `generated.utc`, so a manifest diff confined to that field is positive
+  evidence that a result reproduced.
+
 ## Documentation decisions
 
 - **Tutorial is Quarto (.qmd)**, matching the `Sample documentation_NEAREST/`

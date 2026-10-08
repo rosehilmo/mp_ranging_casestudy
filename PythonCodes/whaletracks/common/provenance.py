@@ -1,0 +1,198 @@
+"""Per-output provenance manifests.
+
+Constitution Principle III: every output must link back to the code, the input
+data (network / station / channel / time), and the parameter choices that
+produced it. Each pipeline command writes a sidecar YAML next to its output::
+
+    Marianas_auto_B20_CORTADO_TEST_v2.csv
+    Marianas_auto_B20_CORTADO_TEST_v2.csv.provenance.yaml
+
+The manifest records:
+
+``file``
+    the file described, its SHA-256, and its row count.
+``generated``
+    UTC timestamp, the command, the installed ``whaletracks`` version, and the
+    code's git commit when the package is run from a checkout. A manifest may
+    also describe a file the repository *ships* but did not generate (a provided
+    input, or an analyst-edited table); pass ``command=None`` for those and the
+    code fields are omitted, because no run produced the file.
+``config``
+    the config file and its SHA-256, plus the run parameters that were actually
+    applied (not the whole file — the values the code read).
+``source``
+    the acoustic source of the data: network, station, channel and time span,
+    as far as each is knowable at that stage of the pipeline. Waveform channel
+    is known only at detection time; downstream stages inherit it through the
+    input chain.
+``inputs``
+    every file read, with its SHA-256, so an output can be tied to the exact
+    bytes that produced it.
+
+Manifests are *descriptive*: writing one never changes the output it describes.
+A re-run reproduces the same output bytes but a new ``generated.utc``, so a
+manifest diff that touches only that field means the result was reproduced.
+"""
+
+import hashlib
+import os
+import subprocess
+from datetime import datetime, timezone
+
+import yaml
+
+MANIFEST_SUFFIX = ".provenance.yaml"
+
+_DIGEST_CHUNK = 1 << 20  # 1 MiB
+
+
+def file_digest(path):
+    """Return ``"sha256:<hex>"`` for a file, read in chunks."""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(_DIGEST_CHUNK), b""):
+            h.update(block)
+    return f"sha256:{h.hexdigest()}"
+
+
+def _csv_rows(path):
+    """Data-row count of a CSV (lines minus the header); None if unreadable."""
+    try:
+        with open(path, "rb") as fh:
+            n = sum(1 for _ in fh)
+        return max(n - 1, 0)
+    except OSError:
+        return None
+
+
+def input_record(path, rows=None):
+    """Describe one input file: path, digest, and row count for CSVs."""
+    rec = {"file": _relpath(path), "sha256": file_digest(path)}
+    if rows is None and str(path).endswith(".csv"):
+        rows = _csv_rows(path)
+    if rows is not None:
+        rec["rows"] = int(rows)
+    return rec
+
+
+def _relpath(path):
+    """Path relative to the working directory when that is shorter/clearer."""
+    try:
+        rel = os.path.relpath(path)
+    except ValueError:  # different drive on Windows
+        return str(path)
+    return rel if not rel.startswith("..") else str(path)
+
+
+def _version():
+    try:
+        from importlib.metadata import version
+
+        return version("whaletracks")
+    except Exception:
+        return None
+
+
+def _git_commit():
+    """Short commit of the checkout holding this file, or None if unavailable."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        out = subprocess.run(
+            ["git", "-C", here, "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    commit = out.stdout.strip()
+    return commit or None
+
+
+def time_span(series):
+    """``{start, end}`` ISO-8601 strings from a datetime-like series."""
+    try:
+        import pandas as pd
+
+        s = pd.to_datetime(series, errors="coerce").dropna()
+        if s.empty:
+            return None
+        return {"start": s.min().isoformat(), "end": s.max().isoformat()}
+    except Exception:
+        return None
+
+
+def manifest_path(output_path):
+    """Sidecar path for an output file."""
+    return str(output_path) + MANIFEST_SUFFIX
+
+
+def write_manifest(output_path, *, command, config_path=None, parameters=None,
+                   source=None, inputs=(), rows=None, notes=None):
+    """Write the provenance sidecar for ``output_path``; return its path.
+
+    ``inputs`` are paths (or dicts already built by :func:`input_record`).
+    ``source`` carries network/station/channel/time span, each optional —
+    keys with a value of ``None`` are dropped rather than written as nulls.
+    ``command=None`` describes a file this repository ships but did not
+    generate; ``notes`` should then say where it came from.
+    """
+    records = [i if isinstance(i, dict) else input_record(i) for i in inputs]
+
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if command is None:
+        generated = {
+            "utc": stamp,
+            "by": "not generated by a whaletracks run — see notes",
+        }
+    else:
+        generated = {
+            "utc": stamp,
+            "command": command,
+            "whaletracks_version": _version(),
+            "git_commit": _git_commit(),
+        }
+
+    doc = {
+        "file": {
+            "name": os.path.basename(str(output_path)),
+            "sha256": file_digest(output_path),
+        },
+        "generated": _drop_none(generated),
+    }
+    if rows is None and str(output_path).endswith(".csv"):
+        rows = _csv_rows(output_path)
+    if rows is not None:
+        doc["file"]["rows"] = int(rows)
+
+    if config_path:
+        doc["config"] = {
+            "file": _relpath(config_path),
+            "sha256": file_digest(config_path),
+        }
+        if parameters:
+            doc["config"]["parameters"] = parameters
+    elif parameters:
+        doc["config"] = {"parameters": parameters}
+
+    if source:
+        cleaned = _drop_none(source)
+        if cleaned:
+            doc["source"] = cleaned
+    if records:
+        doc["inputs"] = records
+    if notes:
+        doc["notes"] = notes
+
+    path = manifest_path(output_path)
+    with open(path, "w") as fh:
+        fh.write(
+            "# Provenance manifest — written by whaletracks alongside the file\n"
+            "# it describes (constitution Principle III). Generated; do not edit.\n"
+        )
+        yaml.safe_dump(doc, fh, sort_keys=False, default_flow_style=False,
+                       allow_unicode=True, width=88)
+    return path
+
+
+def _drop_none(d):
+    """Shallow copy without ``None`` values."""
+    return {k: v for k, v in d.items() if v is not None}

@@ -25,6 +25,7 @@ from scipy.signal import hilbert
 
 from whaletracks.cli._common import LOG, load_yaml, setup_logging
 from whaletracks.common import constants as cn
+from whaletracks.common import provenance
 from whaletracks.common.util import datetime_to_epoch
 from whaletracks.detection import basic_ranging_model as ranging
 from whaletracks.detection import detect_calls as detect
@@ -393,6 +394,40 @@ def main(argv=None):
             detection_path=chunk_path,
             is_restart=cfg.get("is_restart", False),
         )
+
+        # Detection is the only stage that touches waveforms, so this is where
+        # the network/station/channel/time span are authoritative; downstream
+        # manifests inherit them through the input chain.
+        source = {
+            "network": cfg["network"],
+            "station": station,
+            "channel": row["Channel"],
+            "location": cfg["location"],
+            "time_span": {
+                "start": pd.Timestamp(row["startdate"]).isoformat(),
+                "end": pd.Timestamp(row["enddate"]).isoformat(),
+            },
+            "waveform_source": f"FDSN {cfg['client']} (anonymous)",
+        }
+        params = {
+            "kernel": cfg["kernel"],
+            "spectrogram": cfg["spectrogram"],
+            "snr": cfg["snr"],
+            "event": cfg["event"],
+            "multipath": cfg["multipath"],
+            "ranging": cfg["ranging"],
+            "response": cfg["response"],
+            "download": cfg["download"],
+            "search_window_s": {"dt_up": float(dt_up), "dt_down": float(dt_down)},
+        }
+        for path, command in ((chunk_path, "whaletracks-detect"),
+                              (auto_path, "whaletracks-detect (autocorrelation)")):
+            if os.path.isfile(path):
+                provenance.write_manifest(
+                    path, command=command, config_path=args.config,
+                    parameters=params, source=source,
+                    inputs=[cfg["station_table"]],
+                )
 
 
 if __name__ == "__main__":

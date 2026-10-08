@@ -111,6 +111,13 @@ between consecutive groups. Behaviours worth knowing:
 
 ## Demonstration data provenance
 
+Every CSV in `data/fin_whale/` carries a `*.provenance.yaml` sidecar recording
+its SHA-256, row count, source network/station/channel/time span, and — for
+files the pipeline generated — the command, config (hashed) and every input.
+Files the repository *ships* but did not generate here (the detection inputs and
+the analyst-corrected table) say so explicitly in their manifest rather than
+claiming a run produced them.
+
 The shipped B20 selection tables are demonstration artifacts for the
 `CORTADO_TEST` dataset, not the published analysis:
 

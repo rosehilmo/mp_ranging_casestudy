@@ -26,14 +26,28 @@ data* below). The fin profile follows the published method of Hilmo & Wilcock
 ## Environment
 
 ```bash
-conda env create -f environment.yml
+conda env create -f environment.yml      # or: mamba env create -f environment.yml
 conda activate mp_ranging_casestudy
+
+# One-time, needed only to render the tutorial: fetch the Chromium that Plotly
+# uses to export static figures.
+kaleido_get_chrome
 ```
 
 This installs the scientific stack (numpy, scipy, pandas, matplotlib, obspy),
-`pyyaml`, and dev tools (`pytest`, `ruff`), and performs an editable install of
-the local `whaletracks` package (so the `whaletracks-*` commands below are on
-your PATH).
+`pyyaml`, Quarto, and dev tools (`pytest`, `ruff`), and performs an editable
+install of the local `whaletracks` package (so the `whaletracks-*` commands
+below are on your PATH).
+
+Verify the install — this exercises the whole offline pipeline against the
+shipped data:
+
+```bash
+MPLBACKEND=Agg python -m pytest -q       # expect: 35 passed
+```
+
+Run every command below from this `PythonCodes` directory: the configs use data
+paths relative to it.
 
 ## Layout
 
@@ -111,6 +125,19 @@ whaletracks-histogram --input data/fin_whale/B20_mp_CORTADO_TEST.csv \
     --threshold 150 --save hist_B20.png
 ```
 
+### Tutorial
+
+```bash
+quarto render tutorials/multipath_ranging.qmd
+```
+
+Builds `tutorials/multipath_ranging.html` — a self-contained page (no network,
+no CDN; figures embedded as static PNGs) that teaches the method and walks the
+code, running the ranging and selection steps live against the shipped B20 data.
+Open it in any browser. The render takes a few minutes, mostly in the
+hypothesis-selection cell; it needs `kaleido_get_chrome` to have been run once.
+A clean render emits no warnings.
+
 ### Interactive verification / manual picking (GUI + network)
 ```bash
 whaletracks-verify --config whaletracks/config/verify_calls.yaml
@@ -152,6 +179,26 @@ output for fin B20 (CORTADO_TEST) against the committed
 `test_hypothesis_selection.py` covers the grouping, qualification, supertrack
 assignment, and per-call interpolation on synthetic data. GUI/network CLIs are
 covered by import / `--help` / config-parse smoke tests only.
+
+## Provenance sidecars
+
+Every CSV the pipeline writes gets a companion manifest:
+
+```
+Marianas_auto_B20_CORTADO_TEST_v2.csv
+Marianas_auto_B20_CORTADO_TEST_v2.csv.provenance.yaml
+```
+
+The sidecar records the command and code version that produced the file, the
+config used (with a SHA-256, so a changed parameter is visible), the
+network / station / channel / time span of the source data, and a SHA-256 and
+row count for **every input** — so any result can be traced back to the exact
+bytes and parameters behind it.
+
+Manifests are descriptive: writing one never alters the output it describes.
+Re-running a stage reproduces the same output bytes but a fresh timestamp, so a
+manifest diff touching only `generated.utc` means the result reproduced cleanly.
+The sidecars shipped with the demonstration data were generated this way.
 
 ## Known issues
 

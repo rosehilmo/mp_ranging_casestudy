@@ -57,9 +57,10 @@ with `conda env create -f environment.yml`.
       render)
 
 **Issues to resolve**:
-- Per-output provenance manifest (Principle III) not yet materialized — ranges
-  are traceable via config + file names but no explicit manifest.
 - FDSN password rotation is a **PI action** outside the repo.
+- Resolved: the per-output provenance manifest (Principle III) is implemented —
+  `common/provenance.py` writes a `<output>.provenance.yaml` sidecar from
+  `run_detection`, `plot_ranges` and `select_hypotheses`.
 - Resolved by the 2026-10-05 trim: fin autocorrelation intermediates (B20
   `CORTADO_TEST` shipped and test-locked; it is the only station shipped, by
   design) and MATLAB/R runtime portability (no MATLAB or R left in the repo).
@@ -155,7 +156,10 @@ this matters only when adapting the pipeline to a fuller dataset.
 - [x] ~~MATLAB → Python conversion~~ — the selection algorithm was ported under
       feature 002; the remaining MATLAB/R scripts were retired in the
       2026-10-05 trim rather than ported (PI decision).
-- [ ] Adopt a provenance manifest format (e.g. sidecar YAML per output)?
+- [x] Adopt a provenance manifest format — **sidecar YAML per output**
+      (`<output>.provenance.yaml`), chosen over an in-CSV header or a central
+      registry: it travels with the file, never alters the output's bytes, and
+      stays readable without the package installed.
 
 ## Notes
 
